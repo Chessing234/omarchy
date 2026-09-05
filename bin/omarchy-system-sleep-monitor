@@ -13,7 +13,9 @@ consume_sleep_events() {
   while IFS= read -r line; do
     if [[ $line == *"boolean ${wanted}"* ]]; then
       if [[ $wanted == "true" ]]; then
+        # Propagate lock failure so the inhibitor keeps the system awake.
         "$sleep_lock"
+        return $?
       fi
       return 0
     fi
