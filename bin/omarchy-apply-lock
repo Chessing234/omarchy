@@ -47,7 +47,7 @@ if [[ -x /usr/bin/fprintd-list ]] &&
   # skips pam_fprintd and this stack fails closed (password is a parallel PAM).
   as_root tee /etc/pam.d/omarchy-lock-fingerprint >/dev/null <<'EOF'
 #%PAM-1.0
-auth       [success=1 default=ignore] pam_exec.so quiet /usr/bin/omarchy-hw-laptop-closed
+auth       [success=ignore default=1] pam_exec.so quiet /usr/bin/omarchy-hw-laptop-open
 auth       required                    pam_fprintd.so
 account    include                     system-local-login
 EOF
