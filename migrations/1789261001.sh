@@ -5,11 +5,11 @@ echo "Gate lock-screen fingerprint auth behind the lid state"
 # unreachable reader. Insert the same pam_exec gate sudo/polkit already use.
 # New setups get this from omarchy-setup-security-fingerprint / omarchy-apply-lock.
 
-gate="auth      [success=1 default=ignore] pam_exec.so quiet /usr/bin/omarchy-hw-laptop-closed"
+gate="auth      [success=ignore default=1] pam_exec.so quiet /usr/bin/omarchy-hw-laptop-open"
 pam=/etc/pam.d/omarchy-lock-fingerprint
 
 if [[ -f $pam ]] &&
   grep -q 'pam_fprintd\.so' "$pam" &&
-  ! grep -q 'omarchy-hw-laptop-closed' "$pam"; then
+  ! grep -q 'omarchy-hw-laptop-open' "$pam"; then
   sudo sed -i "/pam_fprintd\.so/i $gate" "$pam"
 fi
