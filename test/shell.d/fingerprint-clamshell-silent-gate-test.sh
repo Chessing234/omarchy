@@ -46,5 +46,11 @@ grep -q 'omarchy-hw-laptop-open' "$migration" ||
   fail "migration installs the lid-open PAM gate"
 grep -q 'omarchy-hw-laptop-closed' "$migration" ||
   fail "migration removes the lid-closed PAM gate"
+grep -q '/etc/pam.d/sudo' "$migration" ||
+  fail "migration rewrites sudo"
+grep -q '/etc/pam.d/polkit-1' "$migration" ||
+  fail "migration rewrites polkit"
+! grep -q 'omarchy-lock-fingerprint' "$migration" ||
+  fail "migration must not gate the lock PAM stack (skipping pam_fprintd unlocks)"
 
-pass "migration flips existing fingerprint PAM gates to the silent polarity"
+pass "migration flips sudo/polkit fingerprint PAM gates to the silent polarity"
