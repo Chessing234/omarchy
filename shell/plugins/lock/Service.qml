@@ -148,6 +148,7 @@ Item {
     resetAuthenticationState()
     lockRequested = true
     armBlankTimer()
+    lockAcquireTimeoutTimer.restart()
     logEvent("lock-requested")
     queueSessionLock()
 
@@ -157,6 +158,20 @@ Item {
     })
 
     return true
+  }
+
+  function clearStalledLockRequest(reason) {
+    if (!lockRequested) return
+    if (sessionLock.locked || sessionLock.secure) return
+
+    logEvent(reason)
+    lockRequested = false
+    pendingSessionLock = false
+    sessionLockStabilizeTimer.stop()
+    pendingSessionLockTimer.stop()
+    lockAcquireTimeoutTimer.stop()
+    resetAuthenticationState()
+    runWake()
   }
 
   function finishUnlock() {
@@ -169,6 +184,7 @@ Item {
     sessionLockStabilizeTimer.stop()
     pendingSessionLockTimer.stop()
     lockLossProbeRetryTimer.stop()
+    lockAcquireTimeoutTimer.stop()
     resetAuthenticationState()
     idleBlankTimer.stop()
     sessionLock.locked = false
@@ -331,6 +347,7 @@ Item {
         root.pendingSessionLock = false
         sessionLockStabilizeTimer.stop()
         pendingSessionLockTimer.stop()
+        lockAcquireTimeoutTimer.stop()
         root.startFingerprint()
       }
     }
@@ -342,6 +359,7 @@ Item {
         root.pendingSessionLock = false
         sessionLockStabilizeTimer.stop()
         pendingSessionLockTimer.stop()
+        lockAcquireTimeoutTimer.stop()
       }
 
       // Authenticated unlock clears lockRequested in finishUnlock first.
@@ -571,6 +589,15 @@ Item {
     onTriggered: root.requestSessionLock()
   }
 
+  // A request that never reaches sessionLock.locked/secure must not latch
+  // forever and make later lock() calls report success (#10299).
+  Timer {
+    id: lockAcquireTimeoutTimer
+    interval: 15000
+    repeat: false
+    onTriggered: root.clearStalledLockRequest("lock-failed: acquire-timeout")
+  }
+
   Timer {
     id: lockLossProbeRetryTimer
     interval: 300
@@ -652,7 +679,15 @@ Item {
 
     function lock(): string {
       if (!root.passwordPamConfigured) return "missing-pam"
-      if (!root.locked && !root.beginLock()) return "failed"
+      // sessionLock.locked/secure are the real compositor lock. lockRequested
+      // alone can latch forever after a stalled acquire (#10299).
+      if (sessionLock.locked || sessionLock.secure) return "ok"
+      if (root.lockRequested) {
+        root.queueSessionLock()
+        lockAcquireTimeoutTimer.restart()
+        return "ok"
+      }
+      if (!root.beginLock()) return "failed"
       return "ok"
     }
 
