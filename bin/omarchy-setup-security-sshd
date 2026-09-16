@@ -211,10 +211,9 @@ CONF
 
 echo -e "\e[32mSetting up SSH server access with key-based authentication.\n\e[0m"
 
-setup_sshd
-bind_localhost
-open_firewall
-
+# Authorize a key before the daemon is reachable. A cancelled prompt or a
+# GitHub fetch that comes back empty must not leave sshd enabled and listening.
+# Upstream's hardening drop-in, sshd -t check, and rollback stay as-is.
 echo
 if [[ -n $KEY ]]; then
   authorize_key "$KEY" || exit 1
@@ -228,7 +227,10 @@ else
   esac
 fi
 
+setup_sshd
+bind_localhost
 disable_password_auth
+open_firewall
 
 echo -e "\e[32m\nPerfect! The SSH server is running and your key is authorized.\e[0m"
 echo "Password logins are off; this machine now accepts authorized keys only."
