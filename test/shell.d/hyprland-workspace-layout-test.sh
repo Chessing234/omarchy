@@ -168,7 +168,7 @@ fi
   fail "workspace layout toggle does not persist a rule without a workspace id"
 pass "workspace layout toggle ignores broken hyprctl output"
 
-HOME="$home_dir" XDG_STATE_HOME="$home_dir/.local/state" OMARCHY_PATH="$ROOT" lua <<'LUA'
+HOME="$home_dir" OMARCHY_PATH="$ROOT" run_lua_test "saved workspace layouts load into Hyprland configuration" <<'LUA'
 local rules = {}
 
 hl = {
@@ -189,4 +189,3 @@ assert(seen["3"] == "scrolling", "numeric workspace rule did not load")
 assert(seen["name:DP-1 desk:1"] == "scrolling", "named workspace rule did not load")
 assert(seen["-1340"] == nil, "stale id-keyed rule was not left behind")
 LUA
-pass "saved workspace layouts load into Hyprland configuration"
