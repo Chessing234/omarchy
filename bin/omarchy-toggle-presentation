@@ -50,6 +50,10 @@ enable_presentation() {
 }
 
 disable_presentation() {
+  if ! enabled; then
+    return 0
+  fi
+
   local bar_off=0 stay=0 dnd=off
   if [[ -f $RESTORE_FILE ]]; then
     bar_off=$(awk -F= '$1 == "bar_off" { print $2 }' "$RESTORE_FILE")

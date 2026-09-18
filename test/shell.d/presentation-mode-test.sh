@@ -68,6 +68,22 @@ status=$(run off)
   fail "presentation off restores notifications" "$(cat "$tmpdir/dnd")"
 pass "presentation off restores the previous bar, dnd, and idle state"
 
+# Inactive `off` is a no-op: it must not undo state owned outside presentation.
+mkdir -p "$home/.local/state/omarchy/toggles" "$home/.local/state/omarchy/indicators"
+touch "$home/.local/state/omarchy/toggles/bar-off"
+touch "$home/.local/state/omarchy/indicators/stay-awake"
+DND_STATE=on
+: >"$tmpdir/dnd"
+run off >/dev/null
+run off >/dev/null
+[[ -f $home/.local/state/omarchy/toggles/bar-off ]] ||
+  fail "inactive presentation off leaves an independently hidden bar"
+[[ -f $home/.local/state/omarchy/indicators/stay-awake ]] ||
+  fail "inactive presentation off leaves independent stay-awake enabled"
+[[ ! -s $tmpdir/dnd ]] ||
+  fail "repeated inactive presentation off leaves independent dnd enabled" "$(cat "$tmpdir/dnd")"
+pass "inactive presentation off is idempotent and preserves independent state"
+
 # Already presenting: bar hidden, dnd on, stay-awake on — turning presentation
 # off must leave those alone.
 mkdir -p "$home/.local/state/omarchy/toggles" "$home/.local/state/omarchy/indicators"
