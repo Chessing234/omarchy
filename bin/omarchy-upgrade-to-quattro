@@ -409,12 +409,15 @@ configure_pacman_channel() {
   local tmp
 
   tmp=$(mktemp)
+  # Do not plant an Optional/trust-all SigLevel override. Packages from
+  # [omarchy] are signed; the section must inherit the global Required
+  # DatabaseOptional (see default/pacman/pacman-*.conf and the migrations that
+  # strip the old override).
   awk -v server="$package_server" '
     BEGIN { in_omarchy = 0; wrote = 0 }
     /^[[:space:]]*\[omarchy\][[:space:]]*$/ {
       if (!wrote) {
         print "[omarchy]"
-        print "SigLevel = Optional TrustAll"
         print "Server = " server
         wrote = 1
       }
@@ -427,7 +430,6 @@ configure_pacman_channel() {
       if (!wrote) {
         print ""
         print "[omarchy]"
-        print "SigLevel = Optional TrustAll"
         print "Server = " server
       }
     }
@@ -1467,6 +1469,7 @@ EOF
   if [[ -f /etc/pam.d/sddm ]]; then
     as_root sed -i '/-auth.*pam_gnome_keyring\.so/d' /etc/pam.d/sddm
     as_root sed -i '/-password.*pam_gnome_keyring\.so/d' /etc/pam.d/sddm
+    as_root sed -i '/-session.*pam_gnome_keyring\.so.*auto_start/d' /etc/pam.d/sddm
   fi
 
   if [[ -f /etc/pam.d/system-auth ]]; then
@@ -1474,6 +1477,9 @@ EOF
     as_root sed -i 's|^\(auth\s\+\[default=die\]\s\+pam_faillock.so\)\s\+authfail.*$|\1 authfail deny=10 unlock_time=120|' /etc/pam.d/system-auth
   fi
   if [[ -f /etc/pam.d/sddm-autologin ]]; then
+    as_root sed -i '/-auth.*pam_gnome_keyring\.so/d' /etc/pam.d/sddm-autologin
+    as_root sed -i '/-password.*pam_gnome_keyring\.so/d' /etc/pam.d/sddm-autologin
+    as_root sed -i '/-session.*pam_gnome_keyring\.so.*auto_start/d' /etc/pam.d/sddm-autologin
     as_root sed -i '/pam_faillock\.so preauth/d' /etc/pam.d/sddm-autologin
     as_root sed -i '/pam_faillock\.so authsucc/d' /etc/pam.d/sddm-autologin
     as_root sed -i '/auth.*pam_permit\.so/a auth        required    pam_faillock.so authsucc' /etc/pam.d/sddm-autologin
