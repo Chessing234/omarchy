@@ -83,7 +83,7 @@ Item {
     font.family: Style.font.family
     font.pixelSize: root.passwordDotFontSize
     font.letterSpacing: root.passwordDotLetterSpacing
-    text: "●".repeat(passwordInput.text.length)
+    text: "*".repeat(passwordInput.text.length)
   }
 
   Rectangle {
@@ -161,7 +161,10 @@ Item {
         enabled: root.inputEnabled && !root.authenticatingPassword
         readOnly: root.authenticatingPassword
         echoMode: TextInput.Password
-        passwordCharacter: "\u25CF"
+        // ASCII asterisk is in every monospace font. U+25CF (●) is not, and
+        // Qt falls back to showing the real password when the mask glyph is
+        // missing from Style.font.family (#12727).
+        passwordCharacter: "*"
         passwordMaskDelay: 0
         color: Color.lock.text
         selectionColor: Color.lock.selection
