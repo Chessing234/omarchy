@@ -11,10 +11,13 @@ setup="$ROOT/bin/omarchy-hibernation-setup"
 grep -Eq '\[\[ -z \$RESUME_DEVICE \|\| -z \$RESUME_OFFSET \]\]' "$setup" ||
   fail "setup refuses an empty resume device or offset" "$(grep -n RESUME_ "$setup" | head -20)"
 
-# The old write gate (offset-only) must be gone from the write path.
-if grep -n 'if \[\[ -n \$RESUME_OFFSET \]\]' "$setup" | grep -v 'already\|Fixing\|empty resume_offset'; then
-  fail "setup must not write resume= on offset alone"
-fi
+# Writing the drop-in must follow the dual check (not an offset-only gate).
+awk '
+  /\[\[ -z \$RESUME_DEVICE \|\| -z \$RESUME_OFFSET \]\]/ { guarded=1 }
+  /KERNEL_CMDLINE\[default\].*resume=\$RESUME_DEVICE/ {
+    if (!guarded) { print "unguarded write at line " NR; exit 1 }
+  }
+' "$setup" || fail "resume.conf write is guarded by the empty device/offset check"
 
 grep -Fq 'resume=[[:space:]]+resume_offset=' "$setup" ||
   fail "setup detects the empty-device drop-in pattern on re-entry"
