@@ -62,7 +62,11 @@ Item {
 
     for (var i = 0; i < screens.length; i++) {
       var screen = screens[i]
-      if (screen && screen.name && screen.width > 0 && screen.height > 0) count += 1
+      // Quickshell's placeholder "FALLBACK" screen is not a real connector.
+      // Locking against it, then watching it disappear, leaves a secure lock
+      // with no keyboard focus on the panel that comes back (#7811).
+      if (!screen || !screen.name || screen.name === "FALLBACK") continue
+      if (screen.width > 0 && screen.height > 0) count += 1
     }
 
     return count
@@ -70,6 +74,12 @@ Item {
 
   function hasRealScreen() {
     return realScreenCount() > 0
+  }
+
+  function forceLockPasswordFocus() {
+    if (!lockRequested) return
+    if (lockView && typeof lockView.forcePasswordFocus === "function")
+      Qt.callLater(function() { lockView.forcePasswordFocus() })
   }
 
   function queueSessionLock() {
@@ -280,6 +290,7 @@ Item {
     // After an intentional wake, give the panel time to finish DPMS
     // renegotiation before blanking again.
     if (lockRequested) armBlankTimer(30000)
+    forceLockPasswordFocus()
   }
 
   function runBlank() {
@@ -723,6 +734,7 @@ Item {
       // A monitor still coming up has no workspace, so cannot answer yet.
       strandedLockRetryTimer.rearm()
       root.checkStrandedLock()
+      root.forceLockPasswordFocus()
     }
   }
 
