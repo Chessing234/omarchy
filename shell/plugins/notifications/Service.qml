@@ -127,12 +127,17 @@ Item {
   //     Trusted because it's almost always omarchy or system shell scripts —
   //     chat apps set app_name to their brand (Discord/Slack/Vesktop), which
   //     falls outside this rule.
+  // Per-session capability for honoring omarchy-exec-argv. Written under
+  // XDG_RUNTIME_DIR (mode 0600) so sandboxed same-uid bus clients cannot read
+  // it; omarchy-notification-send attaches it as omarchy-exec-token.
+  property string execToken: ""
+
   function shouldBypassDnd(notification) {
     return NotificationLogic.shouldBypassDnd(notification, NotificationUrgency.Critical)
   }
 
   function snapshotOf(notification) {
-    return NotificationLogic.snapshotOf(notification, Date.now())
+    return NotificationLogic.snapshotOf(notification, Date.now(), service.execToken)
   }
 
   // A notification nobody looks back at:
@@ -206,7 +211,7 @@ Item {
     writeHistoryFile(written, function() {
       var updated = null
       try {
-        updated = NotificationLogic.replacementSnapshot(notification, written.originalId, written.timestamp)
+        updated = NotificationLogic.replacementSnapshot(notification, written.originalId, written.timestamp, service.execToken)
       } catch (e) {
         // Torn down by the server while the write was queued.
       }
@@ -260,7 +265,7 @@ Item {
 
     var updated
     try {
-      updated = NotificationLogic.replacementSnapshot(notification, originalId, timestamp)
+      updated = NotificationLogic.replacementSnapshot(notification, originalId, timestamp, service.execToken)
     } catch (e) {
       // Object torn down by the server while the signal was in flight.
       return
@@ -413,6 +418,31 @@ Item {
     id: ensureDirsProc
     command: ["mkdir", "-p", service.stateDir, service.popupStateDir, service.historyDir, service.imagesDir]
     running: false
+  }
+
+  // Mint a fresh click-exec token for this shell session and park it where
+  // only host processes can read it. Sandboxed notify callers share the bus
+  // but not $XDG_RUNTIME_DIR/omarchy.
+  Process {
+    id: mintExecTokenProc
+    running: false
+    command: ["bash", "-c",
+      "set -euo pipefail\n" +
+      "runtime=\"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}\"\n" +
+      "dir=\"$runtime/omarchy\"\n" +
+      "mkdir -p -m 700 -- \"$dir\"\n" +
+      "token=$(openssl rand -hex 32)\n" +
+      "umask 077\n" +
+      "printf '%s' \"$token\" > \"$dir/notification-exec-token\"\n" +
+      "printf '%s' \"$token\"\n"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var token = String(text || "").trim()
+        if (token) service.execToken = token
+        else console.warn("omarchy notifications: failed to mint exec token")
+      }
+    }
   }
 
   // ---------------------------------------------------- popup persistence
@@ -834,6 +864,7 @@ Item {
 
   Component.onCompleted: {
     ensureDirsProc.running = true
+    mintExecTokenProc.running = true
     // Once mkdir has had a tick, load the existing settings file. FileView
     // surfaces an empty string when the file doesn't exist; loadSettings
     // handles that path.
