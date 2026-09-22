@@ -72,7 +72,7 @@ flags map onto that call:
 | Flag | Becomes | Meaning |
 |---|---|---|
 | `-g` / `--glyph` | hint `omarchy-glyph` | Nerd Font glyph for the icon slot when no image icon resolves |
-| `--exec <program> [args…]` | hint `omarchy-exec-argv` | the click command; consumes the rest of the line, so it comes last. Each word is a discrete argument the shell runs without re-parsing (see below) |
+| `--exec <program> [args…]` | hints `omarchy-exec-argv` + `omarchy-exec-token` | the click command; consumes the rest of the line, so it comes last. Each word is a discrete argument the shell runs without re-parsing (see below). The token is the per-session capability written under `$XDG_RUNTIME_DIR/omarchy/` — without a match the shell ignores the argv |
 | `--image` | hint `image-path` | the standard freedesktop image hint |
 | `-i` / `--icon` | `app_icon` | themed icon name for the toast |
 | `--app-name` | `app_name` | defaults to `omarchy-action` |
