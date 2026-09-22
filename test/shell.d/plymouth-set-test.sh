@@ -239,6 +239,11 @@ cat >"$root_tools/stat" <<'SH'
 #!/bin/bash
 last=${!#}
 if [[ ${1:-} == -c && ${2:-} == %u ]]; then
+  if [[ -n ${TEST_REPAIRED_OWNERS:-} && -f $TEST_REPAIRED_OWNERS ]] &&
+      grep -Fxq -- "$last" "$TEST_REPAIRED_OWNERS"; then
+    printf '0\n'
+    exit 0
+  fi
   if [[ (-n ${TEST_UNTRUSTED_SOURCE:-} && $last == "$TEST_UNTRUSTED_SOURCE"*) ||
         (-n ${TEST_UNTRUSTED_CONFIGURATION:-} && $last == "$TEST_UNTRUSTED_CONFIGURATION"*) ]]; then
     printf '1000\n'
@@ -258,6 +263,9 @@ cat >"$root_tools/chown" <<'SH'
 #!/bin/bash
 last=${!#}
 [[ $last == "$TEST_FAKE_ROOT"* || $last == /tmp/omarchy-plymouth.* ]] || exit 93
+if [[ -n ${TEST_REPAIRED_OWNERS:-} && ( $1 == "0:0" || $1 == "root:root" ) ]]; then
+  printf '%s\n' "$last" >>"$TEST_REPAIRED_OWNERS"
+fi
 exit 0
 SH
 
@@ -384,6 +392,7 @@ run_in_fake_root() {
       TEST_OMARCHY_CONF="$omarchy_conf" \
       TEST_SUDO_LOG="$sudo_log" \
       TEST_LEAK_LOG="$leak_log" \
+      TEST_REPAIRED_OWNERS="$run_dir/repaired-owners" \
       "$@"
   )
 }
@@ -762,6 +771,36 @@ status=$?
 assert_no_temporary_files "$fake_root"
 
 pass "publication refuses a destination directory root does not own"
+
+# The pre-#8934 cp -a path left theme directories user-owned mode 0700. That
+# exact legacy shape is repaired in place; other user-owned modes stay refused.
+setup_run
+chmod 0700 "$theme" "$theme/logos" "$sddm"
+: >"$run_dir/repaired-owners"
+output=$(run_set 022 env TEST_UNTRUSTED_SOURCE="$theme" 2>&1)
+status=$?
+
+(( status == 0 )) || fail "legacy user-owned 0700 Plymouth theme directory is repaired" "$output"
+[[ $(stat -c %a "$theme") == 755 && $(stat -c %a "$theme/logos") == 755 ]] ||
+  fail "legacy Plymouth theme directories are restored to mode 0755"
+grep -Fxq -- "$theme" "$run_dir/repaired-owners" || fail "legacy Plymouth theme directory is reclaimed by root"
+grep -Fxq -- "$theme/logos" "$run_dir/repaired-owners" || fail "legacy Plymouth logos directory is reclaimed by root"
+cmp -s "$test_tmp/logo.png" "$theme/logo.png" || fail "legacy Plymouth repair still publishes the selected logo"
+assert_no_temporary_files "$fake_root"
+
+setup_run
+chmod 0700 "$theme" "$theme/logos" "$sddm"
+: >"$run_dir/repaired-owners"
+output=$(run_set 022 env TEST_UNTRUSTED_SOURCE="$sddm" 2>&1)
+status=$?
+
+(( status == 0 )) || fail "legacy user-owned 0700 SDDM theme directory is repaired" "$output"
+[[ $(stat -c %a "$sddm") == 755 ]] || fail "legacy SDDM theme directory is restored to mode 0755"
+grep -Fxq -- "$sddm" "$run_dir/repaired-owners" || fail "legacy SDDM theme directory is reclaimed by root"
+cmp -s "$test_tmp/logo.png" "$sddm/logo.png" || fail "legacy SDDM repair still publishes the selected logo"
+assert_no_temporary_files "$fake_root"
+
+pass "legacy user-owned 0700 theme directories are repaired before publication"
 
 # The packaged tree is validated file by file, not only directory by directory.
 # A single user-owned asset inside an otherwise root-owned directory is still
