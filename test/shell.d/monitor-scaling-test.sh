@@ -231,3 +231,20 @@ grep -Fx 'hl.monitor({ output = "eDP-1", mode = "preferred", position = "auto", 
 grep -Fx 'hl.monitor({ output = "HDMI-A-1", mode = "preferred", position = "auto", scale = 1 })' "$monitor_lua" >/dev/null ||
   fail "monitor scaling leaves an existing unrelated rule in place when appending"
 pass "monitor scaling appends a named rule when none matches"
+
+# Symlinked monitors.lua must stay a link to the same target after persist
+# (GNU sed -i without --follow-symlinks replaces the symlink with a file).
+dotfiles_lua="$test_tmp/dotfiles/monitors.lua"
+mkdir -p "$(dirname "$dotfiles_lua")"
+write_monitor_config
+mv "$monitor_lua" "$dotfiles_lua"
+ln -s "$dotfiles_lua" "$monitor_lua"
+[[ -L $monitor_lua ]] || fail "fixture monitors.lua should be a symlink"
+pre_target=$(readlink "$monitor_lua")
+OMARCHY_TEST_MONITOR_SCALE=2 run_scaling 3
+[[ -L $monitor_lua ]] || fail "set_scale must leave monitors.lua as a symlink"
+[[ $(readlink "$monitor_lua") == "$pre_target" ]] ||
+  fail "set_scale must keep the same symlink target"
+grep -Fx 'local omarchy_monitor_scale = 3' "$dotfiles_lua" >/dev/null ||
+  fail "set_scale must update the symlink target content"
+pass "monitor scaling preserves symlinked monitors.lua"
