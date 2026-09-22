@@ -73,9 +73,8 @@ def on_method_call(connection, sender, object_path, interface_name, method_name,
     ):
         invocation.return_value(None)
     else:
-        invocation.return_error_literal(
-            Gio.DBusError.quark(),
-            Gio.DBusError.UNKNOWN_METHOD,
+        invocation.return_dbus_error(
+            "org.freedesktop.DBus.Error.UnknownMethod",
             "Method %s is not implemented" % method_name,
         )
 
