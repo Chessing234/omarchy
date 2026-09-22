@@ -241,18 +241,22 @@ Item {
 
   function respondToPasswordPrompt() {
     if (!authenticatingPassword || !passwordPam.active || !passwordPam.responseRequired) return
+    // Only answer an echo-off password prompt. Echo-on consent / yes-no
+    // prompts (e.g. face modules) must not be fed the typed password or the
+    // stack aborts before pam_unix with no failure UI (#8762).
+    if (passwordPam.responseVisible) return
     passwordPam.respond(pendingPassword)
   }
 
   function handlePasswordFailure() {
-    if (!lockRequested) return
-
+    // A submit that was in flight must still flash failure even if the
+    // compositor dropped the lock mid-conversation and cleared lockRequested.
     authenticatingPassword = false
     enteredPassword = ""
     pendingPassword = ""
     failedAttempts += 1
     failureMessage = "Authentication failed (" + failedAttempts + ")"
-    runWake()
+    if (lockRequested) runWake()
   }
 
   function startFingerprint() {
@@ -379,12 +383,17 @@ Item {
     onPamMessage: root.respondToPasswordPrompt()
 
     onCompleted: function(result) {
-      root.authenticatingPassword = false
       root.pendingPassword = ""
 
-      if (!root.lockRequested) return
-      if (result === PamResult.Success) root.finishUnlock()
-      else root.handlePasswordFailure()
+      if (result === PamResult.Success) {
+        root.authenticatingPassword = false
+        if (root.lockRequested) root.finishUnlock()
+        return
+      }
+
+      // Always surface failure for a password submit, even if lockRequested
+      // was cleared while PAM was still finishing (#8762).
+      root.handlePasswordFailure()
     }
 
     onError: function(error) {
