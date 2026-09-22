@@ -979,7 +979,10 @@ ShellRoot {
       ensureService(id)
     }
     // Drop services for plugins that have been disabled or removed, or that
-    // no longer declare a service entry point.
+    // no longer declare a service entry point. keepLoaded services (lock,
+    // idle, polkit) must survive the same way unloadPluginServices does —
+    // destroying them while Hyprland holds ext-session-lock strands the
+    // session (builtin-defaults window marks third-party locks disabled).
     for (var existingId in _services) {
       var stillThere = plugins[existingId]
       var stillService = stillThere && Array.isArray(stillThere.kinds)
@@ -987,6 +990,7 @@ ShellRoot {
         && stillThere.entryPoints && stillThere.entryPoints.service
       var stillEnabled = stillThere && pluginRegistry.isEnabled(existingId)
       if (stillService && stillEnabled) continue
+      if (serviceKeepLoaded(existingId)) continue
       var inst = _services[existingId]
       if (inst && typeof inst.destroy === "function") inst.destroy()
       var next = ({})
@@ -1006,6 +1010,7 @@ ShellRoot {
         && authenticationManifest.entryPoints.service
       if (stillAuthenticationService && pluginRegistry.isEnabled(authenticationId)
           && shell.isAuthenticationService(authenticationManifest, authenticationId)) continue
+      if (serviceKeepLoaded(authenticationId)) continue
       AuthServiceStore.destroy(authenticationId)
     }
   }

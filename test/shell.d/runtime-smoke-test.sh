@@ -466,6 +466,17 @@ lock_event_after=$(jq -r '.lastEvent // empty' <<<"$lock_status_after")
   fail_with_log "plugin rescan keeps the keepLoaded service instance mounted"
 pass "keepLoaded service instance survives plugin rescan"
 
+# Disablement also goes through _syncServices (not unloadPluginServices). A
+# keepLoaded service must survive that path too — otherwise a builtin-defaults
+# window that marks a third-party lock disabled strands the session lock.
+[[ $(shell_ipc shell setPluginEnabled "$keep_service_id" false) == "ok" ]] ||
+  fail_with_log "keepLoaded fixture service could not be disabled"
+[[ $(shell_ipc acme-keep get) == "survived" ]] ||
+  fail_with_log "disablement keeps the keepLoaded service instance mounted"
+[[ $(shell_ipc shell setPluginEnabled "$keep_service_id" true) == "ok" ]] ||
+  fail_with_log "keepLoaded fixture service could not be re-enabled"
+pass "keepLoaded service instance survives disablement"
+
 # Dropping the service entry point from the manifest must drop the kept
 # instance instead of leaving a zombie behind.
 jq 'del(.keepLoaded) | .kinds = ["overlay"] | .entryPoints = {"overlay": "Service.qml"}' \
