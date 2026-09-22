@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Migration 1790044019 recovers DNS when /etc/resolv.conf still points at the
+# Migration 1790048120 recovers DNS when /etc/resolv.conf still points at the
 # systemd-resolved stub but the unit is inactive (historical migration
 # 1782002156 swallowed restart failures with || true). Assert the recovery
 # migration enables resolved only when needed, and that the historical
@@ -11,7 +11,7 @@ set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/base-test.sh"
 
 historical="$ROOT/migrations/1782002156.sh"
-recovery="$ROOT/migrations/1790044019.sh"
+recovery="$ROOT/migrations/1790048120.sh"
 
 test_dir=$(mktemp -d)
 trap 'rm -rf "$test_dir"' EXIT
