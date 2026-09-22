@@ -91,10 +91,13 @@ start() {
 
   if omarchy-cmd-present systemd-inhibit; then
     if (( EUID != 0 )); then
-      if [[ -t 0 ]]; then
-        sudo -v
+      # Never gate on bare `sudo -v`: under Arch's default verifypw=all it
+      # prompts even when NOPASSWD is granted, and omarchy-update always has a
+      # PTY via `script`, so [[ -t 0 ]] cannot mean a human is present (#9066).
+      # Probe non-interactively; fall back to pkexec only when attended.
+      if sudo -n true 2>/dev/null; then
         inhibit_runner=(sudo)
-      else
+      elif [[ ${OMARCHY_UPDATE_UNATTENDED:-} != 1 ]]; then
         inhibit_runner=(pkexec)
       fi
     fi

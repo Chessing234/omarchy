@@ -123,9 +123,9 @@ if (( EUID != 0 )); then
   terminal_inhibit_pid_file="$test_tmp/terminal-inhibit-pid"
   write_stub sudo '
 printf "%s\n" "$*" >>"$SUDO_LOG"
-if [[ $1 == "-v" ]]; then
-  exit 0
-fi
+# Non-interactive probe (#9066); never require a bare -v that can hang.
+[[ $1 != "-n" ]] || shift
+[[ $1 != "true" ]] || exit 0
 exec "$@"'
   write_stub pkexec 'touch "$PKEXEC_MARKER"; exec "$@"'
 
@@ -146,7 +146,7 @@ SH
   SUDO_LOG="$sudo_log" PKEXEC_MARKER="$pkexec_marker" INHIBIT_PID_FILE="$terminal_inhibit_pid_file" \
     run_with_lock_env script -qefc "$terminal_driver" /dev/null >/dev/null
 
-  grep -qx -- '-v' "$sudo_log" || fail "terminal sleep inhibition validates sudo in the foreground"
+  grep -qx -- '-n true' "$sudo_log" || fail "terminal sleep inhibition probes sudo without prompting"
   grep -q '^systemd-inhibit ' "$sudo_log" || fail "terminal sleep inhibition runs through sudo"
   [[ ! -e $pkexec_marker ]] || fail "terminal sleep inhibition does not use pkexec"
   run_with_lock_env "$ROOT/bin/omarchy-update-stay-awake" stop
