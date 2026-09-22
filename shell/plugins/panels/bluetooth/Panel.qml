@@ -275,7 +275,9 @@ Panel {
 
   function connectDevice(device) {
     if (!device || device.connected) return
-    if (device.paired || device.bonded || device.trusted) runDeviceAction(device, "connect", "connecting")
+    // Trusted without a bond is stuck: BlueZ auto-connects and pairing fails
+    // until Forget. Only a real pairing or bond should take the connect path.
+    if (device.paired || device.bonded) runDeviceAction(device, "connect", "connecting")
     else runDeviceAction(device, "pair", "connecting")
   }
 
