@@ -93,3 +93,17 @@ HOME="$home" PATH="$stub:$PATH" BG_SET_LOG="$tmpdir/set" \
 [[ $(<"$tmpdir/set") == "$user_backgrounds/a.png" ]] ||
   fail "theme-bg-prev resolves a relative current background link" "$(cat "$tmpdir/set")"
 pass "theme-bg-prev resolves a relative current background link"
+
+# Videos are part of the cycle for bg-next; prev must use the same extensions.
+rm -rf "$home/.local/state/omarchy/current/theme/backgrounds" "$user_backgrounds"
+mkdir -p "$home/.local/state/omarchy/current/theme/backgrounds"
+printf 'img' >"$home/.local/state/omarchy/current/theme/backgrounds/1-a.png"
+printf 'vid' >"$home/.local/state/omarchy/current/theme/backgrounds/2-m.mp4"
+printf 'img' >"$home/.local/state/omarchy/current/theme/backgrounds/3-z.png"
+ln -sfn "$home/.local/state/omarchy/current/theme/backgrounds/3-z.png" \
+  "$home/.local/state/omarchy/current/background"
+HOME="$home" PATH="$stub:$PATH" BG_SET_LOG="$tmpdir/set" \
+  "$BASH" "$ROOT/bin/omarchy-theme-bg-prev"
+[[ $(<"$tmpdir/set") == "$home/.local/state/omarchy/current/theme/backgrounds/2-m.mp4" ]] ||
+  fail "theme-bg-prev selects a video background" "$(cat "$tmpdir/set")"
+pass "theme-bg-prev cycles through video backgrounds"
