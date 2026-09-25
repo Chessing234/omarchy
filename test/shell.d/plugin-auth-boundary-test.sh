@@ -84,10 +84,15 @@ qml_matches "$shell_qml" 'shellApi\.entrySettings *= *shell\.pluginEntrySettings
   fail "scoped shell entry settings do not refresh with shell config"
 qml_matches "$plugin_shell_api" 'property +var +entrySettings' ||
   fail "PluginShellApi does not expose entrySettings"
-qml_matches "$shell_qml" 'item\.service *= *shell\.pluginServiceFor\( *panelEntry\.pluginId, *panelEntry\.pluginId *\)' ||
-  fail "panel plugins do not resolve their own authentication service"
-qml_matches "$shell_qml" 'AuthServiceStore\.has\( *id *\) *\? *AuthServiceStore\.get\( *id *\) *: *null' ||
-  fail "own authentication services are not resolved from AuthServiceStore"
+qml_matches "$shell_qml" 'item\.service *= *AuthServiceStore\.has\( *serviceId *\)' ||
+  fail "panel plugins do not resolve their own authentication service in host Loader code"
+qml_matches "$shell_qml" 'return AuthServiceStore\.has\( *id *\) *\? *AuthServiceStore\.get\( *id *\) *: *null' ||
+  fail "own authentication services are not resolved from AuthServiceStore inside the facade"
+# ShellRoot-reachable pluginServiceFor must not hand out auth services.
+plugin_service_for=$(sed -n '/^  function pluginServiceFor(/,/^  function /p' "$shell_qml")
+if tr '\n\r\t' '   ' <<<"$plugin_service_for" | grep -Eq 'AuthServiceStore'; then
+  fail "pluginServiceFor must not fall back to AuthServiceStore"
+fi
 pass "third-party entry points receive scoped shell facades"
 
 if qml_matches "$plugin_shell_api" 'function +pluginShellForId\('; then
@@ -167,7 +172,7 @@ qml_matches "$shell_qml" 'shell\.serviceFor\( *shell\.pluginRegistry\.resolveEna
   fail "narrow first-party service proxies do not resolve enabled clones"
 qml_matches "$shell_qml" 'return serviceFor\( *shell\.pluginRegistry\.resolveEnabledId\( *pluginId *\) *\)' ||
   fail "trusted first-party service lookups do not resolve enabled clones"
-qml_matches "$shell_qml" 'allowOwnService *&& *shell\.pluginOwnsTarget\( *key, *requestedId *\)[^}]*return shell\.pluginServiceFor\( *key, *requestedId *\)' ||
+qml_matches "$shell_qml" 'allowOwnService *&& *shell\.pluginOwnsTarget\( *key, *requestedId *\)[^}]*AuthServiceStore\.has\( *id *\)' ||
   fail "cloned widgets cannot use a source id to reach their own service"
 pass "service facades resolve enabled clones without widening replacement-bar access"
 

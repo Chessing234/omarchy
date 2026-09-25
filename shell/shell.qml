@@ -385,14 +385,14 @@ ShellRoot {
   function pluginServiceFor(pluginId, requestedId) {
     if (!shell.pluginOwnsTarget(pluginId, requestedId)) return null
     var id = shell.pluginRegistry.resolveEnabledId(requestedId)
-    var fromMap = shell.serviceFor(id)
-    if (fromMap) return fromMap
-    // Authentication services live outside _services; still hand a plugin its
-    // own instance so lock/polkit clones can wire overlay buttons.
-    return AuthServiceStore.has(id) ? AuthServiceStore.get(id) : null
+    // Authentication services stay out of this ShellRoot-reachable helper.
+    // Own-auth wiring happens inside the facade closure and the host panel
+    // Loader so a bare `shell.pluginServiceFor("omarchy.lock", …)` stays null.
+    return shell.serviceFor(id)
   }
 
   // Settings fields from this plugin's own shell.json entry (id stripped).
+  // Deep-copied so nested arrays/objects are not live host config aliases.
   function pluginEntrySettings(pluginId) {
     var id = shell.pluginRegistry.resolveEnabledId(String(pluginId || ""))
     if (!id) return ({})
@@ -408,11 +408,8 @@ ShellRoot {
     else if (location.kind === "bar-option" && config.bar)
       entry = config.bar
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) return ({})
-    var copy = ({})
-    for (var key in entry) {
-      if (key === "id") continue
-      copy[key] = entry[key]
-    }
+    var copy = JSON.parse(JSON.stringify(entry))
+    delete copy.id
     return copy
   }
 
@@ -628,11 +625,21 @@ ShellRoot {
       idleConfig: shell.publicIdleConfigFor(manifest),
       entrySettings: shell.pluginEntrySettings(key),
       _serviceLookup: function(requestedId) {
-        return allowOwnService ? shell.pluginServiceFor(key, requestedId) : null
+        if (!allowOwnService) return null
+        if (!shell.pluginOwnsTarget(key, requestedId)) return null
+        var id = shell.pluginRegistry.resolveEnabledId(requestedId)
+        var fromMap = shell.serviceFor(id)
+        if (fromMap) return fromMap
+        // Own auth services only — closed over here, not via ShellRoot.
+        return AuthServiceStore.has(id) ? AuthServiceStore.get(id) : null
       },
       _firstPartyServiceLookup: function(requestedId) {
-        if (allowOwnService && shell.pluginOwnsTarget(key, requestedId))
-          return shell.pluginServiceFor(key, requestedId)
+        if (allowOwnService && shell.pluginOwnsTarget(key, requestedId)) {
+          var id = shell.pluginRegistry.resolveEnabledId(requestedId)
+          var fromMap = shell.serviceFor(id)
+          if (fromMap) return fromMap
+          return AuthServiceStore.has(id) ? AuthServiceStore.get(id) : null
+        }
         return hasCurrentBarCapabilities() ? (firstPartyServices[requestedId] || null) : null
       },
       _barEntryShellLookup: function(ownerId, moduleName) {
@@ -1365,11 +1372,14 @@ ShellRoot {
           if ("pluginRegistry" in item) item.pluginRegistry = shell.pluginRegistryFor(panelEntry.manifest)
           // Plugins that pair a panel UI with a service entry read shared
           // state off `service`. Hand them the matching singleton if one was
-          // loaded.
-          // Own authentication services are outside _services; resolve through
-          // pluginServiceFor so a lock/polkit clone still receives itself.
-          if ("service" in item)
-            item.service = shell.pluginServiceFor(panelEntry.pluginId, panelEntry.pluginId)
+          // loaded. Auth services stay outside _services; resolve them here in
+          // host Loader code only (not via pluginServiceFor on ShellRoot).
+          if ("service" in item) {
+            var serviceId = panelEntry.pluginId
+            item.service = AuthServiceStore.has(serviceId)
+              ? AuthServiceStore.get(serviceId)
+              : shell.serviceFor(serviceId)
+          }
           shell.registerPanelLoader(panelEntry.pluginId, this)
         }
         onStatusChanged: {
