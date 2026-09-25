@@ -197,6 +197,14 @@ brightness=$(DRM_PATH="$drm_aio_docked" DDC_CONNECTOR=DP-2 run_brightness --moni
 [[ $brightness == "40" ]] || fail "a docked all-in-one still drives its own panel" "actual: $brightness"
 pass "an all-in-one panel keeps the kernel backlight with a second display connected"
 
+# Two connected outputs, neither listed by detect: only the unique unddc case
+# may use the backlight. A second DDC-less external must not move the built-in.
+rm -rf "$runtime_dir/omarchy-brightness-display-ddc"
+if DRM_PATH="$drm_aio_docked" DDC_CONNECTOR=DP-9 run_brightness --monitor DP-2 >/dev/null 2>&1; then
+  fail "a second DDC-less display on an all-in-one does not move the built-in backlight"
+fi
+pass "a second DDC-less display on an all-in-one does not fall back"
+
 # A laptop's DDC-less external monitor must keep failing. Falling back would
 # move the laptop's own panel while the user is asking for the other one.
 rm -rf "$runtime_dir/omarchy-brightness-display-ddc"

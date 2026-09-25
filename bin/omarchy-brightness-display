@@ -59,8 +59,40 @@ machine_has_internal_connector() {
   return 1
 }
 
+ddc_listed_connectors() {
+  ddcutil --skip-ddc-checks detect --brief 2>/dev/null | awk '
+    /DRM connector:/ {
+      connector = $NF
+      sub(/^card[0-9]+-/, "", connector)
+      print connector
+    }
+  '
+}
+
+# Fall back only when the named monitor is the unique connected connector that
+# ddcutil did not list. Otherwise a second DDC-less external on an all-in-one
+# would steer the built-in backlight.
 backlight_owns_named_monitor() {
-  ! machine_has_internal_connector && omarchy-hw-display >/dev/null 2>&1
+  local status path conn listed
+  local -a unddc=()
+
+  ! machine_has_internal_connector || return 1
+  omarchy-hw-display >/dev/null 2>&1 || return 1
+  [[ -n $monitor ]] || return 1
+
+  listed=$(ddc_listed_connectors)
+  for status in "$drm_path"/card*-*/status; do
+    [[ -e $status ]] || continue
+    [[ $(<"$status") == "connected" ]] || continue
+    path=${status%/status}
+    conn=${path##*/}
+    conn=${conn#*-}
+    if ! grep -Fxq -- "$conn" <<<"$listed"; then
+      unddc+=("$conn")
+    fi
+  done
+
+  (( ${#unddc[@]} == 1 )) && [[ ${unddc[0]} == "$monitor" ]]
 }
 
 use_apple_display() {
