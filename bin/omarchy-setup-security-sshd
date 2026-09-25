@@ -58,6 +58,19 @@ if [[ -n $KEY && -n $GITHUB_USER ]]; then
 fi
 
 
+install_openssh() {
+  echo "Installing the OpenSSH server..."
+  omarchy-pkg-add openssh
+}
+
+# Drop-ins are written before the daemon is enabled so the first listen already
+# uses them. Reload only if sshd was already running (re-run / repair).
+reload_sshd_if_active() {
+  if systemctl is-active --quiet sshd.service 2>/dev/null; then
+    sudo systemctl reload sshd.service
+  fi
+}
+
 bind_localhost() {
   local config=/etc/ssh/sshd_config.d/20-omarchy-localhost.conf
 
@@ -77,13 +90,10 @@ CONF
     sudo rm -f "$config"
     return 0
   fi
-
-  sudo systemctl reload sshd.service || true
 }
 
-setup_sshd() {
-  echo "Installing and starting the OpenSSH server..."
-  omarchy-pkg-add openssh
+start_sshd() {
+  echo "Starting the OpenSSH server..."
   sudo systemctl enable --now sshd.service
 }
 
@@ -205,15 +215,15 @@ CONF
   fi
 
   # Reload rather than restart so an administrator already connected keeps
-  # their session.
-  sudo systemctl reload sshd.service
+  # their session. Skip when sshd is not up yet; start_sshd picks the drop-in up.
+  reload_sshd_if_active
 }
 
 echo -e "\e[32mSetting up SSH server access with key-based authentication.\n\e[0m"
 
-# Authorize a key before the daemon is reachable. A cancelled prompt or a
-# GitHub fetch that comes back empty must not leave sshd enabled and listening.
-# Upstream's hardening drop-in, sshd -t check, and rollback stay as-is.
+# Authorize a key and write hardening drop-ins before the daemon listens.
+# A cancelled prompt or a GitHub fetch that comes back empty must not leave
+# sshd enabled. Upstream's sshd -t check and rollback stay as-is.
 echo
 if [[ -n $KEY ]]; then
   authorize_key "$KEY" || exit 1
@@ -227,9 +237,10 @@ else
   esac
 fi
 
-setup_sshd
+install_openssh
 bind_localhost
 disable_password_auth
+start_sshd
 open_firewall
 
 echo -e "\e[32m\nPerfect! The SSH server is running and your key is authorized.\e[0m"

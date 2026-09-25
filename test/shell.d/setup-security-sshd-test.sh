@@ -21,6 +21,11 @@ STUB
 cat >"$stub_bin/systemctl" <<'STUB'
 #!/bin/bash
 printf 'systemctl %s\n' "$*" >>"${CALL_LOG:?}"
+# Fresh setup has not started sshd yet; only claim active when a test opts in.
+if [[ $1 == is-active ]]; then
+  [[ ${SSHD_ACTIVE:-0} == 1 ]]
+  exit $?
+fi
 STUB
 cat >"$stub_bin/sshd" <<'STUB'
 #!/bin/bash
@@ -47,12 +52,15 @@ cat >"$stub_bin/sudo" <<'STUB'
 #!/bin/bash
 case $1 in
 install)
+  # Portable stand-in for `install -Dm644 /dev/stdin dest`: macOS install
+  # rejects /dev/stdin and has no -D, and some hosts lack /usr/bin/mkdir.
   destination="${TEST_ROOT:?}${4:?}"
-  /usr/bin/mkdir -p "${destination%/*}"
-  /usr/bin/install -Dm644 /dev/stdin "$destination"
+  mkdir -p "${destination%/*}"
+  cat >"$destination"
+  chmod 644 "$destination"
   ;;
 rm)
-  /usr/bin/rm -f "${TEST_ROOT:?}${3:?}"
+  rm -f "${TEST_ROOT:?}${3:?}"
   ;;
 *)
   exec "$@"
@@ -84,7 +92,8 @@ output=$(run_setup success)
 config="$test_dir/success/root/etc/ssh/sshd_config.d/10-omarchy-hardening.conf"
 grep -qxF "PasswordAuthentication no" "$config" || fail "SSH setup disables password authentication"
 grep -qxF "KbdInteractiveAuthentication no" "$config" || fail "SSH setup disables keyboard-interactive authentication"
-grep -qxF "systemctl reload sshd.service" "$test_dir/success.calls" || fail "SSH setup reloads the validated config"
+grep -qxF "systemctl enable --now sshd.service" "$test_dir/success.calls" || fail "SSH setup starts sshd only after hardening is in place"
+! grep -qxF "systemctl reload sshd.service" "$test_dir/success.calls" || fail "fresh SSH setup should start sshd once, not reload mid-flight"
 grep -q "Password logins are off" <<<"$output" || fail "SSH setup reports hardening after it succeeds"
 pass "SSH setup authorizes a key and disables password logins"
 
