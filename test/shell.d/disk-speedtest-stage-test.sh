@@ -12,6 +12,10 @@ grep -Fq 'root.phase === "write" || root.phase === "stage"' "$panel" ||
   fail "disk speedtest panel keeps the write dial live during staging"
 grep -Fq 'phase = ""' "$panel" ||
   fail "disk speedtest panel starts with no phase so the read dial is not live at 0"
+grep -Fq 'writeMBps = ""' "$panel" ||
+  fail "disk speedtest panel clears the write dial when the read phase starts"
+grep -Fq 'worker_pids+=("$stager")' "$ROOT/bin/omarchy-disk-speedtest" ||
+  fail "disk speedtest tracks the staging subshell so stop kills its writers"
 pass "disk speedtest panel treats staging samples as live write-dial input"
 
 tmpdir=$(mktemp -d)

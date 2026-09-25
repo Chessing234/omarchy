@@ -90,6 +90,7 @@ Item {
       writeMBps = String(value)
     } else if (parts[0] === "read") {
       phase = "read"
+      writeMBps = ""
       readMBps = String(value)
     }
   }

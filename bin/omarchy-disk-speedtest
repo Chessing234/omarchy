@@ -228,10 +228,12 @@ stage_failed=0
   exit $fail
 ) &
 stager=$!
+worker_pids+=("$stager")
 
 before=$(device_sectors write)
 while kill -0 "$stager" 2>/dev/null; do
-  sleep 1
+  sleep 1 &
+  wait $! || true
   after=$(device_sectors write)
   rate=$(awk -v before="$before" -v after="$after" 'BEGIN {
     if (after < before) print 0
