@@ -8,8 +8,8 @@ require_command jq
 
 config="$ROOT/etc/fastfetch/config.jsonc"
 helper="$ROOT/bin/omarchy-fastfetch-logo"
-compact="$ROOT/etc/fastfetch/logo.txt"
-small="$ROOT/etc/fastfetch/logo-small.txt"
+compact="$ROOT/default/fastfetch/logo.txt"
+small="$ROOT/default/fastfetch/logo-small.txt"
 full="$ROOT/logo.txt"
 
 jq empty "$config"
@@ -104,6 +104,18 @@ pass "an 80-column terminal gets the compact O"
 narrow=$(run_logo 40 12)
 [[ -n $narrow && $narrow == "$tight" ]] || fail "a terminal too small for any mark still prints the compact O" "$narrow"
 pass "a terminal too small for any mark still prints the compact O"
+
+# Packaged installs only ship share trees under /usr/share/omarchy (no etc/).
+packaged_root=$(mktemp -d)
+trap 'rm -rf "$packaged_root"' EXIT
+mkdir -p "$packaged_root/default/fastfetch"
+cp "$full" "$packaged_root/logo.txt"
+cp "$compact" "$packaged_root/default/fastfetch/logo.txt"
+cp "$small" "$packaged_root/default/fastfetch/logo-small.txt"
+packaged_tight=$(OMARCHY_PATH="$packaged_root" COLUMNS=80 LINES=24 omarchy-fastfetch-logo)
+[[ $packaged_tight == "$tight" ]] ||
+  fail "a packaged layout still picks the compact O at 80 columns" "$packaged_tight"
+pass "a packaged layout still picks the compact O at 80 columns"
 
 [[ $wide == *$'\e'* || $medium == *$'\e'* || $tight == *$'\e'* ]] && fail "NO_COLOR leaves the wordmark uncoloured"
 pass "NO_COLOR leaves the wordmark uncoloured"

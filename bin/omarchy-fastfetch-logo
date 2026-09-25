@@ -56,8 +56,12 @@ logo_height() {
 }
 
 # Largest first: the full wordmark, a half-width one, then the compact O.
+# Packaged installs ship the sized marks under default/fastfetch/ (share tree);
+# etc/fastfetch/ stays as a checkout fallback.
 variants=(
   "$omarchy_path/logo.txt"
+  "$omarchy_path/default/fastfetch/logo.txt"
+  "$omarchy_path/default/fastfetch/logo-small.txt"
   "$omarchy_path/etc/fastfetch/logo.txt"
   "$omarchy_path/etc/fastfetch/logo-small.txt"
 )
@@ -66,6 +70,7 @@ chosen=""
 fallback=""
 for file in "${variants[@]}"; do
   [[ -f $file ]] || continue
+  # Prefer the smallest known mark if nothing fits, not the last file scanned.
   fallback=$file
   w=$(logo_width "$file")
   h=$(logo_height "$file")
@@ -74,6 +79,7 @@ for file in "${variants[@]}"; do
     break
   fi
 done
+# variants are largest→smallest; if none fit, use the last existing file found.
 [[ -n $chosen ]] || chosen=$fallback
 [[ -n $chosen ]] || exit 1
 
