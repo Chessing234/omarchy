@@ -10,8 +10,8 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/base-test.sh"
 helper="$ROOT/bin/omarchy-pkg-upgrade-sunshine-security"
 [[ -x $helper ]] || fail "omarchy-pkg-upgrade-sunshine-security is executable"
 
-grep -q '2026.906.222525-1.1' "$helper" ||
-  fail "helper pins Sunshine 2026.906.222525-1.1 as the security floor"
+grep -q '2026.914.233613-1' "$helper" ||
+  fail "helper pins Sunshine 2026.914.233613-1 as the security floor"
 
 grep -q 'pkgs.omarchy.org/edge' "$helper" ||
   fail "helper pulls the security build from the edge package repo"

@@ -19,6 +19,11 @@ cat >"$mock_bin/omarchy-pkg-add" <<'SH'
 printf 'pkg-add:%s\n' "$*" >>"$OMARCHY_TEST_LOG"
 SH
 
+cat >"$mock_bin/omarchy-pkg-upgrade-sunshine-security" <<'SH'
+#!/bin/bash
+printf 'security-upgrade\n' >>"$OMARCHY_TEST_LOG"
+SH
+
 cat >"$mock_bin/omarchy-cmd-missing" <<'SH'
 #!/bin/bash
 printf 'cmd-missing:%s\n' "$*" >>"$OMARCHY_TEST_LOG"
@@ -152,8 +157,10 @@ grep -Fq 'webapp-install:Sunshine Admin' "$log" ||
   fail "sunshine install still installs the admin webapp after enable" "$log"
 wait_for_log 'webapp-launch:https://localhost:47990' "$log" ||
   fail "sunshine install still launches the admin webapp after enable" "$log"
-grep -Fxq 'o.launch_on_start("sunshine")' "$test_home/.config/hypr/autostart.lua" ||
-  fail "sunshine install still enables hyprland autostart after enable"
+grep -Fxq 'security-upgrade' "$log" || fail "sunshine install runs the security-floor helper" "$log"
+if [[ -f $test_home/.config/hypr/autostart.lua ]] && grep -Fq 'o.launch_on_start("sunshine")' "$test_home/.config/hypr/autostart.lua"; then
+  fail "sunshine install must not add a Hyprland autostart line (systemd unit only)"
+fi
 pass "fresh sunshine install enables the canonical unit and continues"
 
 : >"$log"
@@ -165,6 +172,7 @@ grep -Fq 'enable --now sunshine' "$systemctl_log" ||
 grep -Fq 'sudo ufw allow' "$log" || fail "sunshine install still opens firewall ports after enable" "$log"
 grep -Fq 'webapp-install:Sunshine Admin' "$log" ||
   fail "re-running sunshine install still installs the admin webapp" "$log"
-autostart_count=$(grep -cFx 'o.launch_on_start("sunshine")' "$test_home/.config/hypr/autostart.lua")
-(( autostart_count == 1 )) || fail "sunshine autostart stays a single line on reinstall"
+if [[ -f $test_home/.config/hypr/autostart.lua ]] && grep -Fq 'o.launch_on_start("sunshine")' "$test_home/.config/hypr/autostart.lua"; then
+  fail "reinstall must not add a Hyprland autostart line"
+fi
 pass "already-enabled sunshine.service is idempotent and later steps still run"
