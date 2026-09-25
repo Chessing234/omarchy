@@ -104,7 +104,14 @@ update_named_monitor_scale() {
   local monitor="$1"
   local scale="$2"
   local file="$3"
-  local tmp="${file}.omarchy-scale.$$"
+  local target=$file
+  local tmp
+
+  # Write through a symlink rather than replacing it (stow/dotfiles setups).
+  if [[ -L $file ]]; then
+    target=$(readlink -f -- "$file") || return 1
+  fi
+  tmp="${target}.omarchy-scale.$$"
 
   if awk -v monitor="$monitor" -v scale="$scale" '
     function strip_comment(s) {
@@ -120,7 +127,7 @@ update_named_monitor_scale() {
       }
       return (index(stripped, "output = \"" name "\"") || index(stripped, "output=\"" name "\""))
     }
-    function replace_scale(buf, value,    n, i, lines, line, out, found, last_brace, pos, c, after, end) {
+    function replace_scale(buf, value,    n, i, lines, line, out, found, last_brace, pos, c, after, end, sep) {
       n = split(buf, lines, "\n")
       out = ""
       found = 0
@@ -150,7 +157,10 @@ update_named_monitor_scale() {
       if (last_brace == 0) return 0
       end = last_brace - 1
       while (end > 0 && substr(buf, end, 1) ~ /[[:space:]]/) end--
-      buffer = substr(buf, 1, end) ", scale = " value substr(buf, end + 1)
+      sep = ", "
+      c = substr(buf, end, 1)
+      if (c == "," || c == "{") sep = " "
+      buffer = substr(buf, 1, end) sep "scale = " value substr(buf, end + 1)
       return 1
     }
     {
@@ -177,7 +187,8 @@ update_named_monitor_scale() {
       exit changed ? 0 : 1
     }
   ' "$file" >"$tmp"; then
-    mv "$tmp" "$file"
+    cat "$tmp" >"$file"
+    rm -f "$tmp"
     return 0
   else
     rm -f "$tmp"

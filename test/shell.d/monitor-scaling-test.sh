@@ -248,3 +248,20 @@ OMARCHY_TEST_MONITOR_SCALE=2 run_scaling 3
 grep -Fx 'local omarchy_monitor_scale = 3' "$dotfiles_lua" >/dev/null ||
   fail "set_scale must update the symlink target content"
 pass "monitor scaling preserves symlinked monitors.lua"
+
+# Named-rule updates must also write through the symlink (not replace it).
+dotfiles_named="$test_tmp/dotfiles/named-monitors.lua"
+mkdir -p "$(dirname "$dotfiles_named")"
+cat >"$dotfiles_named" <<'LUA'
+hl.monitor({ output = "eDP-1", mode = "preferred", position = "0x0", scale = 2 })
+LUA
+rm -f "$monitor_lua"
+ln -s "$dotfiles_named" "$monitor_lua"
+pre_target=$(readlink "$monitor_lua")
+OMARCHY_TEST_MONITOR_SCALE=2 run_scaling 1.6
+[[ -L $monitor_lua ]] || fail "named-rule persist must leave monitors.lua as a symlink"
+[[ $(readlink "$monitor_lua") == "$pre_target" ]] ||
+  fail "named-rule persist must keep the same symlink target"
+grep -Fx 'hl.monitor({ output = "eDP-1", mode = "preferred", position = "0x0", scale = 1.6 })' "$dotfiles_named" >/dev/null ||
+  fail "named-rule persist must update the symlink target content"
+pass "monitor scaling preserves symlinked monitors.lua for named rules"
