@@ -97,7 +97,7 @@ run_toggle HYPRCTL_STATE="$tmpdir/s2" HYPRCTL_ID=-1340 HYPRCTL_NAME="DP-1 desk:1
 
 grep -Fx 'eval hl.workspace_rule({ workspace = "name:DP-1 desk:1", layout = "scrolling" })' "$log_file" >/dev/null ||
   fail "workspace layout toggle addresses a named workspace by name"
-named_file="$home_dir/.local/state/omarchy/workspace-layouts/name-DP-1_desk_1.lua"
+named_file="$home_dir/.local/state/omarchy/workspace-layouts/name-44502d31206465736b3a31.lua"
 [[ -f $named_file ]] ||
   fail "workspace layout toggle keys the saved rule on the name, not the reassigned id"
 [[ -f "$home_dir/.local/state/omarchy/workspace-layouts/-1340.lua" ]] &&
@@ -167,6 +167,20 @@ fi
 [[ -f "$home_dir/.local/state/omarchy/workspace-layouts/null.lua" ]] &&
   fail "workspace layout toggle does not persist a rule without a workspace id"
 pass "workspace layout toggle ignores broken hyprctl output"
+
+
+# ── distinct names must not share a saved file ───────────────────────────────
+: >"$log_file"
+: >"$notify_file"
+layouts_dir="$home_dir/.local/state/omarchy/workspace-layouts"
+rm -f "$layouts_dir"/name-*.lua
+run_toggle HYPRCTL_STATE="$tmpdir/s_coll_a" HYPRCTL_ID=-1 HYPRCTL_NAME="dev.foo" \
+  HYPRCTL_ACCEPTS="name:dev.foo" || fail "toggle succeeds for dev.foo"
+run_toggle HYPRCTL_STATE="$tmpdir/s_coll_b" HYPRCTL_ID=-2 HYPRCTL_NAME="dev_foo" \
+  HYPRCTL_ACCEPTS="name:dev_foo" || fail "toggle succeeds for dev_foo"
+files=( "$layouts_dir"/name-*.lua )
+(( ${#files[@]} == 2 )) || fail "dev.foo and dev_foo keep separate state files" "$(ls -1 "$layouts_dir")"
+pass "workspace layout toggle keeps colliding sanitized names in separate files"
 
 HOME="$home_dir" OMARCHY_PATH="$ROOT" run_lua_test "saved workspace layouts load into Hyprland configuration" <<'LUA'
 local rules = {}

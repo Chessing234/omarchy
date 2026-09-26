@@ -17,10 +17,9 @@ CURRENT_LAYOUT=$(jq -r '.tiledLayout // empty' <<<"$ACTIVE_WORKSPACE_JSON")
 if (( ACTIVE_WORKSPACE_ID < 0 )); then
   [[ -n $ACTIVE_WORKSPACE_NAME ]] || exit 1
   WORKSPACE_SELECTOR="name:$ACTIVE_WORKSPACE_NAME"
-  # The state filename becomes a Lua module name, so keep it to characters a
-  # module path can hold. Names collide only if they differ solely by the
-  # characters being replaced.
-  STATE_KEY="name-$(printf '%s' "$ACTIVE_WORKSPACE_NAME" | tr -c 'A-Za-z0-9_-' '_')"
+  # The state filename becomes a Lua module name. Hex-encode the whole name so
+  # "dev.foo" and "dev_foo" cannot overwrite each other after tr-collapse.
+  STATE_KEY="name-$(printf '%s' "$ACTIVE_WORKSPACE_NAME" | od -An -tx1 | tr -d ' \n')"
 else
   WORKSPACE_SELECTOR="$ACTIVE_WORKSPACE_ID"
   STATE_KEY="$ACTIVE_WORKSPACE_ID"
