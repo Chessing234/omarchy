@@ -341,7 +341,7 @@ var enterpriseConnectScript =
   "IFS= read -r pw; created=0; u=;" +
   " while IFS=: read -r cand _type; do" +
   "   [[ $_type == 802-11-wireless ]] || continue;" +
-  "   ssid=$(nmcli -g 802-11-wireless.ssid connection show uuid \"$cand\" 2>/dev/null);" +
+  "   ssid=$(nmcli -e no -g 802-11-wireless.ssid connection show uuid \"$cand\" 2>/dev/null);" +
   "   [[ $ssid == \"$1\" ]] || continue;" +
   "   km=$(nmcli -g 802-11-wireless-security.key-mgmt connection show uuid \"$cand\" 2>/dev/null);" +
   "   [[ $km == wpa-eap ]] || continue;" +

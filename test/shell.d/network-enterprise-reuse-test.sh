@@ -46,9 +46,25 @@ if [[ $1 == "-t" && $2 == "-f" && $3 == "UUID,TYPE" ]]; then
   exit 0
 fi
 
+# nmcli -g escapes : and \ by default; -e no returns the raw SSID.
+escape_nmcli_value() {
+  local value=$1
+  value=${value//\\/\\\\}
+  value=${value//:/\\:}
+  printf '%s\n' "$value"
+}
+
+if [[ $1 == "-e" && $2 == "no" && $3 == "-g" && $5 == "connection" && $6 == "show" && $7 == "uuid" ]]; then
+  case "$4" in
+    802-11-wireless.ssid) profile_get "$8" ssid ;;
+    802-11-wireless-security.key-mgmt) profile_get "$8" key-mgmt ;;
+  esac
+  exit 0
+fi
+
 if [[ $1 == "-g" && $3 == "connection" && $4 == "show" && $5 == "uuid" ]]; then
   case "$2" in
-    802-11-wireless.ssid) profile_get "$6" ssid ;;
+    802-11-wireless.ssid) escape_nmcli_value "$(profile_get "$6" ssid)" ;;
     802-11-wireless-security.key-mgmt) profile_get "$6" key-mgmt ;;
   esac
   exit 0
@@ -190,3 +206,23 @@ created=$(cat "$tmp/state/last-created" 2>/dev/null || true)
 grep -qxF "$created" "$tmp/state/deleted" || fail "failed activation deletes only the profile this attempt created" "deleted=$(cat "$tmp/state/deleted" 2>/dev/null || true)"
 [[ ! -f $tmp/state/profile.$created ]] || fail "created profile file is gone after cleanup"
 pass "failed brand-new connect cleans up its own UUID"
+
+# Default nmcli -g escaping would turn these into Campus\:Secure / Campus\\Secure
+# and miss the existing profile. The helper must query with -e no.
+: >"$tmp/state/wifi-uuids"
+: >"$tmp/state/log"
+rm -f "$tmp/state"/profile.* "$tmp/state/deleted" "$tmp/state/last-up" "$tmp/state/last-created" "$tmp/state/fail-up"
+seed cat-colon 'Campus:Secure' wpa-eap user@campus.edu
+run_script 'Campus:Secure' user@campus.edu 's3cret'
+[[ $(<"$tmp/state/last-up") == cat-colon ]] || fail "reuses a profile whose SSID contains a colon" "up=$(cat "$tmp/state/last-up" 2>/dev/null || true)"
+[[ ! -e $tmp/state/last-created ]] || fail "does not synthesize a second profile for a colon SSID"
+pass "reuses an existing profile when the SSID contains a colon"
+
+: >"$tmp/state/wifi-uuids"
+: >"$tmp/state/log"
+rm -f "$tmp/state"/profile.* "$tmp/state/deleted" "$tmp/state/last-up" "$tmp/state/last-created"
+seed cat-backslash 'Campus\Secure' wpa-eap user@campus.edu
+run_script 'Campus\Secure' user@campus.edu 's3cret'
+[[ $(<"$tmp/state/last-up") == cat-backslash ]] || fail "reuses a profile whose SSID contains a backslash" "up=$(cat "$tmp/state/last-up" 2>/dev/null || true)"
+[[ ! -e $tmp/state/last-created ]] || fail "does not synthesize a second profile for a backslash SSID"
+pass "reuses an existing profile when the SSID contains a backslash"

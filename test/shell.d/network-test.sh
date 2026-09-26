@@ -274,8 +274,16 @@ assert(
   'enterprise connect only deletes a profile it just created'
 )
 assert(
+  /nmcli -e no -g 802-11-wireless\.ssid/.test(network.enterpriseConnectScript),
+  'enterprise connect reads SSIDs without nmcli escaping so colon/backslash names reuse'
+)
+assert(
   !/802-1x\.auth-timeout 8/.test(network.enterpriseConnectScript),
   'enterprise connect does not pin an eight-second auth timeout'
+)
+assert(
+  /row\.isFailed \? \(root\.failureReason \|\| "Wrong password"\)/.test(panelSource),
+  'password prompt shows the mapped failureReason instead of a hard-coded wrong password'
 )
 
 assertEqual(network.canForgetNetwork({ known: true, connected: false, security: security.Owe }), true, 'network can forget known disconnected OWE networks')
