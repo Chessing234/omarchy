@@ -137,5 +137,19 @@ if [[ -f $profile ]]; then
   is_stock_keyboard_us_profile || exit 0
 fi
 
+# A live fcitx5 flushes its in-memory profile on shutdown and would overwrite
+# the seed we are about to write. Stop it first; the migration (or a later
+# login) starts it again against the rewritten file.
+if systemctl --user is-active --quiet omarchy-fcitx5.service 2>/dev/null ||
+  pgrep -x fcitx5 >/dev/null 2>&1; then
+  systemctl --user stop omarchy-fcitx5.service 2>/dev/null || true
+  pkill -x fcitx5 >/dev/null 2>&1 || true
+  # Wait for the process to finish saving so our write is the last one.
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    pgrep -x fcitx5 >/dev/null 2>&1 || break
+    sleep 0.1
+  done
+fi
+
 write_profile
 printf 'changed\n'

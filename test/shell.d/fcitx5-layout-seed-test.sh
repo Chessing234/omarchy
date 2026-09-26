@@ -15,8 +15,31 @@ mkdir -p "$stub_bin" "$test_dir/home/.config/fcitx5" "$test_dir/etc"
 cat >"$stub_bin/systemctl" <<'STUB'
 #!/bin/bash
 printf '%s\n' "$*" >>"${SYSTEMCTL_CALLS:?}"
-[[ $* == *is-active* ]] || exit 0
-exit "${SYSTEMCTL_ACTIVE:-1}"
+case "$*" in
+*"is-active"*omarchy-fcitx5*)
+  exit "${FCITX_ACTIVE:-1}"
+  ;;
+*"is-active"*graphical-session*)
+  exit "${SYSTEMCTL_ACTIVE:-1}"
+  ;;
+*"stop"*omarchy-fcitx5*)
+  echo stop >>"${STOP_CALLS:?}"
+  exit 0
+  ;;
+*)
+  exit 0
+  ;;
+esac
+STUB
+cat >"$stub_bin/pgrep" <<'STUB'
+#!/bin/bash
+# No live fcitx5 unless a test opts in via FCITX_PGREP=0.
+exit "${FCITX_PGREP:-1}"
+STUB
+cat >"$stub_bin/pkill" <<'STUB'
+#!/bin/bash
+echo pkill >>"${STOP_CALLS:?}"
+exit 0
 STUB
 cat >"$stub_bin/omarchy-restart-xcompose" <<'STUB'
 #!/bin/bash
@@ -70,9 +93,15 @@ write_vconsole() {
 }
 
 run_helper() {
-  OMARCHY_VCONSOLE="$test_dir/etc/vconsole.conf" \
+  : >"$test_dir/stop-calls"
+  SYSTEMCTL_CALLS="$test_dir/systemctl-calls" \
+    STOP_CALLS="$test_dir/stop-calls" \
+    FCITX_ACTIVE="${FCITX_ACTIVE:-1}" \
+    FCITX_PGREP="${FCITX_PGREP:-1}" \
+    OMARCHY_VCONSOLE="$test_dir/etc/vconsole.conf" \
     OMARCHY_FCITX5_PROFILE="$test_dir/home/.config/fcitx5/profile" \
     HOME="$test_dir/home" \
+    PATH="$stub_bin:$PATH" \
     bash -euo pipefail "$helper"
 }
 
@@ -103,6 +132,17 @@ write_vconsole 'XKBLAYOUT=fr'
 grep -qx 'DefaultIM=keyboard-fr' "$profile" || fail "stock rewrite sets DefaultIM"
 grep -qx 'Name=keyboard-fr' "$profile" || fail "stock rewrite sets item Name"
 pass "stock keyboard-us-only profile is rewritten for a non-us console"
+
+# Running daemon must be stopped before the profile write so it cannot flush
+# the old layout back over the seed on shutdown.
+stock_us_profile >"$profile"
+write_vconsole 'XKBLAYOUT=fr'
+FCITX_ACTIVE=0 FCITX_PGREP=1
+[[ $(run_helper) == changed ]] || fail "helper still seeds while fcitx5 is active"
+grep -qx stop "$test_dir/stop-calls" || fail "helper stops omarchy-fcitx5 before writing"
+grep -qx 'DefaultIM=keyboard-fr' "$profile" || fail "profile stays fr after stop-then-write"
+pass "helper stops a running fcitx5 before rewriting the profile"
+FCITX_ACTIVE=1 FCITX_PGREP=1
 
 stock_us_profile >"$profile"
 write_vconsole 'XKBLAYOUT=us'
@@ -142,9 +182,13 @@ pass "leading non-us layout in a comma list rewrites stock"
 run_migration() {
   : >"$test_dir/systemctl-calls"
   : >"$test_dir/restart-calls"
+  : >"$test_dir/stop-calls"
   SYSTEMCTL_CALLS="$test_dir/systemctl-calls" \
     RESTART_CALLS="$test_dir/restart-calls" \
+    STOP_CALLS="$test_dir/stop-calls" \
     SYSTEMCTL_ACTIVE="${1:-1}" \
+    FCITX_ACTIVE="${FCITX_ACTIVE:-1}" \
+    FCITX_PGREP="${FCITX_PGREP:-1}" \
     OMARCHY_VCONSOLE="$test_dir/etc/vconsole.conf" \
     OMARCHY_FCITX5_PROFILE="$profile" \
     HOME="$test_dir/home" \
