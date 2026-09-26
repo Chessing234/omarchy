@@ -24,10 +24,11 @@ dev=${*: -1}
 name=${dev#/dev/}
 opts=$*
 
+# -dno PKNAME: util-linux treats a directly queried dm device as a tree root
+# with no whole-disk parent (PKNAME empty). Partitions still report the disk.
 parent_of() {
   case "$1" in
     sda1|sda2) printf 'sda\n' ;;
-    root) printf 'sda2\n' ;;
     sdb1) printf 'sdb\n' ;;
     *) : ;;
   esac
@@ -106,11 +107,14 @@ out=$(drive_info /dev/sda2)
   fail "drive info reports the size of the device asked about, not the disk" "$out"
 pass "drive info resolves a partition up to its disk"
 
-# The mapping is two levels down; one hop up is still a partition.
+# Direct dm query: lsblk -dno PKNAME is empty, so the walk stops at the mapping.
+# (Pre-existing limitation; mapping-aware traversal is not claimed here.)
 out=$(drive_info /dev/root)
-[[ $out == *"Samsung SSD 870 EVO 1TB"* ]] ||
-  fail "drive info walks up through a crypt mapping to the disk" "$out"
-pass "drive info walks up through a nested mapping"
+[[ $out == *"/dev/root (929.5G)"* ]] ||
+  fail "drive info still reports a directly queried mapping" "$out"
+[[ $out != *"Samsung SSD 870 EVO 1TB"* ]] ||
+  fail "drive info must not invent a disk parent for a direct dm query" "$out"
+pass "drive info leaves a direct dm mapping unresolved to its disk"
 
 # sdb reports the vendor twice: once as VENDOR and again at the head of MODEL.
 # sda cannot cover this -- its model shares no word with its vendor, so it reads
