@@ -14,6 +14,11 @@ assert(
 )
 
 assert(
+  /function clearStalledLockRequest\(reason\)[\s\S]*if \(!hasRealScreen\(\)\)[\s\S]*lockAcquireTimeoutTimer\.restart\(\)/.test(serviceQml),
+  'acquire timeout keeps lockRequested pending when no real screen is present'
+)
+
+assert(
   /id: lockAcquireTimeoutTimer[\s\S]*lock-failed: acquire-timeout/.test(serviceQml),
   'a pending lock that never reaches the compositor times out'
 )
