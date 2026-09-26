@@ -72,6 +72,9 @@ assert_dismisses '{"class":"kitty"}' \
 assert_dismisses '{"class":"firefox"}' \
   "screensaver dismisses when firefox is focused"
 
+# --check-focus is a single poll: empty class is the monitor-hop case and must
+# stay. The live loop bounds consecutive empty polls so an empty workspace
+# still dismisses (see empty_focus_limit below).
 assert_stays '{}' \
   "screensaver stays when activewindow has no class"
 
@@ -83,6 +86,13 @@ assert_stays 'null' \
 
 assert_stays '' \
   "screensaver stays when activewindow is empty during a monitor switch"
+
+if rg -F -q 'empty_focus_limit' "$ROOT/bin/omarchy-screensaver" &&
+  rg -F -q 'empty_focus_streak' "$ROOT/bin/omarchy-screensaver"; then
+  pass "live screensaver loop bounds consecutive empty-focus polls"
+else
+  fail "live screensaver loop bounds consecutive empty-focus polls"
+fi
 
 if rg -F -q "pkill -f '[o]rg.omarchy.screensaver'" "$ROOT/bin/omarchy-screensaver"; then
   pass "real dismiss still kills all screensaver clients"

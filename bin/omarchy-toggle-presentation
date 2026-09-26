@@ -40,11 +40,17 @@ enable_presentation() {
   if enabled; then
     return 0
   fi
-  write_restore
+  # Keep an existing restore baseline (a killed prior enable may have left one
+  # after already mutating UI). Overwriting it would snapshot the wrong state.
+  if [[ ! -f $RESTORE_FILE ]]; then
+    write_restore
+  fi
+  # Mark enabled before mutating UI so a kill mid-enable does not treat the
+  # already-changed state as a fresh baseline on the next on.
+  touch "$STATE_FILE"
   omarchy-toggle-bar on
   omarchy-shell -q notifications setDnd on
   omarchy-toggle-idle stay-awake >/dev/null
-  touch "$STATE_FILE"
   omarchy-shell -q omarchy.indicators refresh
   omarchy-notification-send -g 󰐼 "Presentation mode on" "Stay awake, notifications silenced, bar hidden"
 }

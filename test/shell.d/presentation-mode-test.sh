@@ -107,6 +107,35 @@ status=$(run off)
   fail "presentation off when never on does not notify" "$(cat "$tmpdir/notify")"
 pass "presentation off is a no-op when presentation was never enabled"
 
+# Kill mid-enable: state file is touched before UI changes, so a second on must
+# not rewrite the restore baseline from the already-mutated settings.
+rm -rf "$home/.local/state/omarchy"
+mkdir -p "$home/.local/state/omarchy/toggles" "$stub"
+: >"$tmpdir/dnd"
+: >"$tmpdir/notify"
+# Simulate a crashed enable that already hid the bar / set stay-awake / DND,
+# wrote restore from the pre-change baseline, and marked presentation on.
+mkdir -p "$home/.local/state/omarchy"
+printf 'bar_off=0\ndnd=off\nstay_awake=0\n' >"$home/.local/state/omarchy/presentation-restore"
+touch "$home/.local/state/omarchy/toggles/presentation"
+touch "$home/.local/state/omarchy/toggles/bar-off"
+mkdir -p "$home/.local/state/omarchy/indicators"
+touch "$home/.local/state/omarchy/indicators/stay-awake"
+DND_STATE=on
+run on >/dev/null
+grep -Fq 'bar_off=0' "$home/.local/state/omarchy/presentation-restore" ||
+  fail "presentation on does not overwrite an existing restore baseline" \
+    "$(cat "$home/.local/state/omarchy/presentation-restore")"
+: >"$tmpdir/dnd"
+run off >/dev/null
+[[ ! -f $home/.local/state/omarchy/toggles/bar-off ]] ||
+  fail "presentation off after interrupted enable restores a previously visible bar"
+[[ ! -f $home/.local/state/omarchy/indicators/stay-awake ]] ||
+  fail "presentation off after interrupted enable clears stay-awake it had set"
+[[ $(<"$tmpdir/dnd") == "off" ]] ||
+  fail "presentation off after interrupted enable restores notifications" "$(cat "$tmpdir/dnd")"
+pass "presentation restore baseline survives a kill mid-enable"
+
 grep -Fq '"trigger.toggle.presentation"' "$ROOT/default/omarchy/omarchy-menu.jsonc" ||
   fail "presentation mode is on the Toggle menu"
 pass "presentation mode is on the Toggle menu"
