@@ -15,6 +15,10 @@ grep -q 'bt-agent -c' "$ROOT/default/systemd/user/bt-agent.service" && \
 [[ -x $ROOT/bin/omarchy-bluetooth-agent ]] || fail "omarchy-bluetooth-agent is executable"
 grep -q 'RequestAuthorization' "$ROOT/bin/omarchy-bluetooth-agent" || \
   fail "omarchy-bluetooth-agent implements RequestAuthorization"
+grep -q 'any_adapter_pairable' "$ROOT/bin/omarchy-bluetooth-agent" || \
+  fail "omarchy-bluetooth-agent gates pairing on adapter Pairable"
+grep -q 'AuthorizeService' "$ROOT/bin/omarchy-bluetooth-agent" || \
+  fail "omarchy-bluetooth-agent still implements AuthorizeService"
 pass "bt-agent auto-accepts Just Works authorization via omarchy-bluetooth-agent"
 
 run_node_test <<'JS'
@@ -57,7 +61,16 @@ assert(/sibling\.owesDiscoveryStop = true/.test(stopTimer[0]), 'bluetooth moves 
 // The debt clears when BlueZ confirms discovery down, and a destroyed
 // instance hands it to a surviving sibling instead of taking it to the grave.
 assert(/onDiscoveringChanged[\s\S]{0,120}owesDiscoveryStop = false/.test(panelSource), 'bluetooth settles the stop it owes once discovery is confirmed down')
-assert(/Component\.onDestruction: \{[\s\S]{0,400}owesDiscoveryStop = true[\s\S]{0,200}discovering = false/.test(panelSource), 'bluetooth passes the stop it owes to a sibling when an instance is destroyed')
+assert(/Component\.onDestruction: \{[\s\S]{0,600}owesDiscoveryStop = true[\s\S]{0,200}discovering = false/.test(panelSource), 'bluetooth passes the stop it owes to a sibling when an instance is destroyed')
+
+// Pairable is the agent's consent window. BlueZ defaults it true forever; the
+// panel must clear that at load/close and only raise it while open.
+assert(/function syncPairable\(\)/.test(panelSource), 'bluetooth has syncPairable')
+assert(/adapter\.pairable = keepPairable/.test(panelSource), 'bluetooth writes adapter.pairable from the open-panel policy')
+assert(/keepPairable = opened \|\| openSibling\(\) !== null/.test(panelSource), 'bluetooth raises Pairable only while a panel is open')
+assert(/onOpenedChanged:[\s\S]{0,800}syncPairable\(\)/.test(panelSource), 'bluetooth syncs Pairable when the panel opens or closes')
+assert(/Component\.onCompleted: syncPairable\(\)/.test(panelSource), 'bluetooth clears default Pairable as soon as the widget loads')
+assert(/onAdapterChanged: syncPairable\(\)/.test(panelSource), 'bluetooth syncs Pairable when the adapter appears')
 
 // A device trusted without a bond is stuck: BlueZ auto-connects it and the
 // pairing fails every few seconds, and a plain connect never opens the pairing
