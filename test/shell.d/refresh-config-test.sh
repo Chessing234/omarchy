@@ -70,3 +70,12 @@ done
   fail "refresh-config does not copy a prefixed /etc/hosts into ~/.config"
 
 pass "refresh-config refuses .. and absolute paths"
+
+# A newline would truncate the `..` scan while the destination still uses the
+# full string. Refuse control characters up front.
+if HOME="$home" OMARCHY_PATH="$omarchy_path" "$ROOT/bin/omarchy-refresh-config" $'hypr\n/../../README' \
+  >"$tmpdir/out" 2>"$tmpdir/err"; then
+  fail "refresh-config refuses a path containing a newline"
+fi
+[[ ! -e $home/README ]] || fail "newline path must not write $HOME/README"
+pass "refresh-config refuses paths containing a newline"

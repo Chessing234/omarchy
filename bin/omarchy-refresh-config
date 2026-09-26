@@ -19,9 +19,11 @@ fi
 
 # The path is joined onto both ~/.config and $OMARCHY_PATH/config. A `..`
 # component or an absolute path would copy a file that is not a shipped user
-# config, and could land the write outside ~/.config.
+# config, and could land the write outside ~/.config. Newlines would truncate
+# the `..` scan while the full string is still used for the destination.
 path_allowed=1
 [[ $config_file != /* ]] || path_allowed=0
+[[ $config_file != *$'\n'* && $config_file != *$'\r'* ]] || path_allowed=0
 IFS=/ read -ra config_parts <<< "$config_file"
 for part in "${config_parts[@]}"; do
   if [[ $part == ".." ]]; then
