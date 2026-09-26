@@ -1,9 +1,10 @@
 #!/bin/bash
 
 # omarchy:summary=Show a QR code for the clipboard or given text
-# omarchy:group=share
+# omarchy:group=cmd
+# omarchy:hidden=true
 # omarchy:args=[text]
-# omarchy:examples=omarchy share qr | omarchy share qr 'https://omarchy.org'
+# Routed as `omarchy share qr` via omarchy-menu-share (filename must not be omarchy-share-*).
 
 set -euo pipefail
 
@@ -33,9 +34,9 @@ fi
 # environment so it does not have to stay on the terminal argv.
 if (( ! display )) && [[ ! -t 1 ]]; then
   if [[ -n ${1:-} ]]; then
-    exec env OMARCHY_SHARE_QR_TEXT="$1" omarchy-launch-floating-terminal-with-presentation "omarchy-share-qr --display"
+    exec env OMARCHY_SHARE_QR_TEXT="$1" omarchy-launch-floating-terminal-with-presentation "omarchy-cmd-qr --display"
   else
-    exec omarchy-launch-floating-terminal-with-presentation "omarchy-share-qr --display"
+    exec omarchy-launch-floating-terminal-with-presentation "omarchy-cmd-qr --display"
   fi
 fi
 
