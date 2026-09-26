@@ -28,6 +28,10 @@ grep -Fq 'chromium-google-oauth.env' "$installer" ||
   fail "installer must load chromium-google-oauth.env"
 grep -Fq 'chmod 600' "$installer" ||
   fail "installer must restrict chromium-flags.conf after writing the secret"
+grep -Fq 'omarchy-refresh-chromium' "$installer" ||
+  fail "missing-flags hint must point at omarchy-refresh-chromium"
+grep -Fq "oauth2-client-(id|secret)" "$installer" ||
+  fail "installer must clear prior OAuth flag lines before appending"
 pass "OAuth credentials live in overrideable env files, not the installer"
 
 mkdir -p "$tmpdir/config" "$tmpdir/share/omarchy/default/chromium"
@@ -60,3 +64,23 @@ grep -Fq -- '--oauth2-client-id=override-id.apps.googleusercontent.com' \
 grep -Fq -- '--oauth2-client-secret=override-secret' \
   "$tmpdir/config/chromium-flags.conf" || fail "user drop-in client secret was ignored"
 pass "user chromium-google-oauth.env overrides packaged defaults"
+
+# Re-run with the packaged defaults without truncating the flags file: prior
+# override lines must be replaced, not left as earlier occurrences Chromium ignores.
+rm -f "$tmpdir/config/omarchy/chromium-google-oauth.env"
+HOME="$tmpdir" XDG_CONFIG_HOME="$tmpdir/config" OMARCHY_PATH="$tmpdir/share/omarchy" \
+  "$installer"
+
+grep -Fq -- '--oauth2-client-id=77185425430.apps.googleusercontent.com' \
+  "$tmpdir/config/chromium-flags.conf" || fail "re-run did not restore packaged client id"
+grep -Fq -- '--oauth2-client-secret=OTJgUOQcT7lO7GsGZq2G4IlT' \
+  "$tmpdir/config/chromium-flags.conf" || fail "re-run did not restore packaged client secret"
+if grep -Fq -- '--oauth2-client-id=override-id.apps.googleusercontent.com' \
+  "$tmpdir/config/chromium-flags.conf"; then
+  fail "re-run left the previous override client id in chromium-flags.conf"
+fi
+if grep -Fq -- '--oauth2-client-secret=override-secret' \
+  "$tmpdir/config/chromium-flags.conf"; then
+  fail "re-run left the previous override secret in chromium-flags.conf"
+fi
+pass "re-run replaces prior OAuth flag lines when credentials change"

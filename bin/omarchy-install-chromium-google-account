@@ -28,7 +28,7 @@ load_oauth_env() {
 CONF="${XDG_CONFIG_HOME:-$HOME/.config}/chromium-flags.conf"
 
 if [[ ! -f $CONF ]]; then
-  echo "No $CONF yet — launch Chromium once, then re-run this command." >&2
+  echo "No $CONF yet — run omarchy-refresh-chromium, then re-run this command." >&2
   exit 1
 fi
 
@@ -44,13 +44,17 @@ fi
 
 echo "Installing Chromium Google account support..."
 
-grep -qxF -- "--oauth2-client-id=$OAUTH2_CLIENT_ID" "$CONF" ||
-  echo "--oauth2-client-id=$OAUTH2_CLIENT_ID" >>"$CONF"
+# Chromium keeps the last occurrence of a repeated switch. Drop any prior
+# OAuth pair before appending so credential rotation or revert takes effect.
+tmp=$(mktemp)
+grep -Ev -- '^--oauth2-client-(id|secret)=' "$CONF" >"$tmp" || true
+mv "$tmp" "$CONF"
 
-grep -qxF -- "--oauth2-client-secret=$OAUTH2_CLIENT_SECRET" "$CONF" ||
-  echo "--oauth2-client-secret=$OAUTH2_CLIENT_SECRET" >>"$CONF"
+echo "--oauth2-client-id=$OAUTH2_CLIENT_ID" >>"$CONF"
+echo "--oauth2-client-secret=$OAUTH2_CLIENT_SECRET" >>"$CONF"
 
-# Flags file holds a client secret; keep it owner-readable only.
+# Flags file can hold a client secret; prefer owner-readable only. The packaged
+# default credentials remain world-readable under default/chromium/.
 chmod 600 "$CONF" 2>/dev/null || true
 
 echo "Now you can login to your Google Account in Chromium."
