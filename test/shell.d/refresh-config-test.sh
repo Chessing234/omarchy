@@ -62,7 +62,7 @@ do
     fail "refresh-config names the refusal for '$bad'" "$(cat "$tmpdir/err")"
 done
 
-[[ $(<$home/.ssh/authorized_keys) == "secret" ]] ||
+[[ $(<"$home/.ssh/authorized_keys") == "secret" ]] ||
   fail "refresh-config does not write ~/.ssh/authorized_keys through .."
 [[ ! -e $home/README ]] ||
   fail "refresh-config does not write $HOME/README through .."
