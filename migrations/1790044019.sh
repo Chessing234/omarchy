@@ -12,12 +12,14 @@ source "$OMARCHY_PATH/install/helpers/keyboard-vconsole.sh"
 omarchy_ensure_vconsole_xkb
 
 layout=$(omarchy_vconsole_get XKBLAYOUT)
+variant=$(omarchy_vconsole_get XKBVARIANT)
 layout=${layout%%,*}
+variant=${variant%%,*}
 [[ -n $layout ]] || exit 0
 
 # Non-Latin layouts must stay out of the initramfs (#6229); hooks already skip
-# them. Only rebuild when a Latin layout is what Plymouth should apply.
-omarchy_layout_is_non_latin "$layout" && exit 0
+# them. Only rebuild when a Latin layout (or Latin variant of rs) applies.
+omarchy_layout_is_non_latin "$layout" "$variant" && exit 0
 
 # Nothing changed and the hooks already exclude non-Latin; still rebuild when
 # we just wrote XKBLAYOUT so an existing UKI picks it up.

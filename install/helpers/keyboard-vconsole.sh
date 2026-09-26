@@ -32,10 +32,22 @@ omarchy_vconsole_get() {
 omarchy_vconsole_set() {
   local key="$1"
   local value="$2"
-  local file
+  local file dir
   file=$(omarchy_vconsole_conf)
+  dir=$(dirname "$file")
 
-  mkdir -p "$(dirname "$file")"
+  # Migrations run unprivileged; /etc/vconsole.conf is root-owned. Elevate the
+  # write when the target is not writable so change detection still works.
+  if { [[ -e $file ]] && [[ ! -w $file ]]; } || { [[ ! -e $file ]] && [[ ! -w $dir ]]; }; then
+    if [[ -f $file ]] && grep -q "^$key=" "$file" 2>/dev/null; then
+      sudo sed -i "s/^$key=.*/$key=$value/" "$file"
+    else
+      printf '%s=%s\n' "$key" "$value" | sudo tee -a "$file" >/dev/null
+    fi
+    return
+  fi
+
+  mkdir -p "$dir"
   touch "$file"
 
   if grep -q "^$key=" "$file" 2>/dev/null; then
@@ -50,11 +62,20 @@ omarchy_vconsole_set() {
 omarchy_keymap_to_xkb() {
   local keymap="$1"
   local map="${OMARCHY_KBD_MODEL_MAP:-/usr/share/systemd/kbd-model-map}"
-  local layout="" variant=""
+  local layout="" variant="" alias=""
 
   case "$keymap" in
     colemak | dvorak)
       printf '%s %s\n' us "$keymap"
+      return 0
+      ;;
+    # Offered in setup-form but absent/aliased in systemd's kbd-model-map.
+    no-latin1)
+      printf 'no \n'
+      return 0
+      ;;
+    de_CH-latin1 | sg-latin1)
+      printf 'ch de_nodeadkeys\n'
       return 0
       ;;
   esac
@@ -77,6 +98,27 @@ omarchy_keymap_to_xkb() {
       printf '%s %s\n' "$layout" "$variant"
       return 0
     fi
+
+    # Hyphenated *-latin1 names often share a row with the bare keymap (no).
+    if [[ $keymap == *-latin1 ]]; then
+      alias=${keymap%-latin1}
+      layout=$(awk -v k="$alias" 'BEGIN { IGNORECASE = 1 }
+        $1 ~ /^#/ || NF < 2 { next }
+        $1 == k { print $2; exit }
+      ' "$map")
+      variant=$(awk -v k="$alias" 'BEGIN { IGNORECASE = 1 }
+        $1 ~ /^#/ || NF < 2 { next }
+        $1 == k {
+          if ($4 == "-" || $4 == "") next
+          print $4
+          exit
+        }
+      ' "$map")
+      if [[ -n $layout ]]; then
+        printf '%s %s\n' "$layout" "$variant"
+        return 0
+      fi
+    fi
   fi
 
   # Bare two-letter console names (fr, de, es) are usually valid XKB layouts.
@@ -88,8 +130,13 @@ omarchy_keymap_to_xkb() {
   return 1
 }
 
+# Returns 0 when the layout cannot type Latin letters. A Latin XKBVARIANT
+# (Serbian sr-latin → rs/latin) keeps a Latin passphrase path into Plymouth.
 omarchy_layout_is_non_latin() {
   local layout="${1%%,*}"
+  local variant="${2-}"
+  variant=${variant%%,*}
+  [[ $variant == latin* ]] && return 1
   [[ $layout =~ $OMARCHY_NON_LATIN_LAYOUTS ]]
 }
 
