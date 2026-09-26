@@ -69,3 +69,24 @@ PATH="$test_tmp/bin:$PATH" \
 grep -Fq -- "-s $test_tmp/boot/EFI/limine/limine_x64.efi" "$test_tmp/sbctl.log" ||
   fail "rerun still re-signs when the efi file remains"
 pass "migration is safe to re-run"
+
+# BIOS installs share the hook filename but deploy limine-bios.sys — keep them.
+cat >"$test_tmp/etc/pacman.d/hooks/99-omarchy-limine.hook" <<'HOOK'
+[Trigger]
+Operation = Upgrade
+Type = Package
+Target = limine
+
+[Action]
+Description = Refresh Limine BIOS stage
+When = PostTransaction
+Exec = /bin/sh -c "limine bios-install /dev/disk && cp /usr/share/limine/limine-bios.sys /boot/limine/"
+HOOK
+PATH="$test_tmp/bin:$PATH" \
+  OMARCHY_LIMINE_PACMAN_HOOK="$test_tmp/etc/pacman.d/hooks/99-omarchy-limine.hook" \
+  OMARCHY_LIMINE_EFI="$test_tmp/boot/EFI/limine/limine_x64.efi" \
+  TEST_TMP="$test_tmp" \
+  bash "$migration"
+[[ -e $test_tmp/etc/pacman.d/hooks/99-omarchy-limine.hook ]] ||
+  fail "migration leaves the BIOS limine hook in place"
+pass "migration leaves BIOS limine deploy hooks alone"
