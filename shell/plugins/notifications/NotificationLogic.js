@@ -163,8 +163,8 @@ function execArgvFromHints(hints, expectedToken) {
 // a STRUCTURAL check only: it fails closed on a malformed hint (non-array, a
 // non-string or empty program, or a leading-dash program that argv would read as
 // an option). It does not judge intent — a well-formed ["bash","-c",…] is
-// accepted once the token gate in execArgvFromHints has already passed (or the
-// value was restored from a previously validated popup snapshot).
+// accepted once the token gate in execArgvFromHints has already passed.
+// Restore clears execArgv so disk snapshots cannot keep click-to-exec.
 function parseExecArgv(value) {
   var text = String(value || "")
   if (!text) return null

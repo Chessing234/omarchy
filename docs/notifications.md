@@ -92,8 +92,8 @@ sender blocked waiting for `ActionInvoked`, and dies unanswered whenever the
 shell restarts underneath it — the installer toasts restart the shell as their
 first act. Carrying the command as a hint means the shell executes the click
 itself (detached, so the command outlives the shell process) from the copy it
-keeps with the popup, which the persistence files preserve: a restored toast
-clicks through exactly like a live one, and oneshot senders can exit
+keeps with the popup for the live toast. Restore after a shell restart clears
+the click command (the token is session-scoped); oneshot senders can exit
 immediately. For third-party clients the click falls back to the libnotify
 `default` action while the sender is alive, then to focusing the sender's
 window by class via `omarchy-hyprland-focus-app` — chat apps rarely register

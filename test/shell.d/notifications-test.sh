@@ -773,8 +773,12 @@ assert(
   'notifications service keeps the per-session exec token in memory'
 )
 assert(
-  /mintExecTokenProc\.running = true/.test(serviceQml),
+  /id: mintExecTokenProc[\s\S]*?running: true/.test(serviceQml),
   'notifications service mints the exec token on startup'
+)
+assert(
+  /startRestoreAfterToken/.test(serviceQml) && /entry\.execArgv = ""/.test(serviceQml),
+  'notifications service restores popups only after the token and clears restored click-exec'
 )
 assert(
   /notification-exec-token/.test(serviceQml),
