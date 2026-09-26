@@ -8,7 +8,10 @@ tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
 
 root=$tmpdir/root
-mkdir -p "$root/etc" "$root/usr/share/polkit-1/actions" "$root/opt/1Password" "$root/usr/local/bin" "$tmpdir/bin"
+mkdir -p "$root/etc/pacman.d/hooks" "$root/usr/share/polkit-1/actions" "$root/opt/1Password" \
+  "$root/usr/local/bin" "$root/usr/share/omarchy/default/libalpm/hooks" "$tmpdir/bin"
+cp "$ROOT/default/libalpm/hooks/90-omarchy-1password-finish.hook" \
+  "$root/usr/share/omarchy/default/libalpm/hooks/"
 
 cat >"$root/etc/passwd" <<'EOF'
 root:x:0:0:root:/root:/bin/bash
@@ -82,6 +85,8 @@ helper=$tmpdir/bin/omarchy-1password-finish-install
 sed \
   -e "s#^POLICY=.*#POLICY=$root/usr/share/polkit-1/actions/com.1password.1Password.policy#" \
   -e "s#^OPT_DIR=.*#OPT_DIR=$root/opt/1Password#" \
+  -e "s#^OMARCHY_PATH=.*#OMARCHY_PATH=$root/usr/share/omarchy#" \
+  -e "s#^HOOK_DST=.*#HOOK_DST=$root/etc/pacman.d/hooks/90-omarchy-1password-finish.hook#" \
   -e "s#/etc/passwd#$root/etc/passwd#g" \
   -e "s#/usr/local/bin#$root/usr/local/bin#g" \
   "$ROOT/bin/omarchy-1password-finish-install" >"$helper"
@@ -130,7 +135,40 @@ pass "finish-install applies setgid helper ownership"
   fail "finish-install links MCP into /usr/local/bin"
 pass "finish-install creates MCP convenience links"
 
+[[ -f $root/etc/pacman.d/hooks/90-omarchy-1password-finish.hook ]] ||
+  fail "finish-install installs a post-transaction repair hook"
+grep -Fq 'Target = 1password' "$root/etc/pacman.d/hooks/90-omarchy-1password-finish.hook" ||
+  fail "repair hook targets the 1password package"
+grep -Fq 'omarchy-1password-finish-install' "$root/etc/pacman.d/hooks/90-omarchy-1password-finish.hook" ||
+  fail "repair hook re-runs the finish helper"
+pass "finish-install installs an alpm hook that survives package upgrades"
+
+# A locally managed /usr/local/bin/1password-mcp must not be replaced.
+# Remove the symlink first: on macOS, > through a symlink overwrites the target.
+rm -f "$root/usr/local/bin/1password-mcp"
+printf '#!/bin/bash\necho local-wrapper\n' >"$root/usr/local/bin/1password-mcp"
+chmod 755 "$root/usr/local/bin/1password-mcp"
+: >"$sudo_log" >"$groups_log" >"$chgrp_log" >"$chmod_log"
+PATH="$tmpdir/bin:/usr/bin:/bin" \
+  OMARCHY_SUDO="$tmpdir/bin/sudo" \
+  OMARCHY_TEST_SUDO_LOG="$sudo_log" \
+  OMARCHY_TEST_GROUPS="$groups_log" \
+  OMARCHY_TEST_CHGRP="$chgrp_log" \
+  OMARCHY_TEST_CHMOD="$chmod_log" \
+  bash "$helper" >"$tmpdir/preserve.out" 2>&1
+[[ -f $root/usr/local/bin/1password-mcp && ! -L $root/usr/local/bin/1password-mcp ]] ||
+  fail "finish-install replaced a locally managed MCP command"
+grep -Fq 'local-wrapper' "$root/usr/local/bin/1password-mcp" ||
+  fail "finish-install altered the locally managed MCP command contents"
+grep -Fq 'leaving' "$tmpdir/preserve.out" ||
+  fail "finish-install should report when it leaves a local MCP command alone"
+pass "finish-install preserves a locally managed MCP command"
+
 # Install helper must call the finish step after packaging.
 grep -Eq 'omarchy-1password-finish-install' "$ROOT/bin/omarchy-install-service-1password" ||
   fail "1password install does not run the finish helper"
 pass "1password install runs the finish helper after pkg add"
+
+[[ -f $ROOT/default/libalpm/hooks/90-omarchy-1password-finish.hook ]] ||
+  fail "missing packaged hook source for 1password repair"
+pass "1password repair hook source is present under default/libalpm/hooks"
