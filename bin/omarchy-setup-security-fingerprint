@@ -65,13 +65,11 @@ EOF
 
 setup_lock_fingerprint_pam() {
   echo "Configuring lock screen for fingerprint authentication..."
-  # Same clamshell gate as sudo/polkit: lid closed → skip pam_fprintd (fail closed
-  # here — this stack has no password fallback; password runs in a parallel PAM
-  # service). Re-enrollment must keep rewriting the gate so it cannot be wiped.
-  local fprintd_gate="auth      [success=ignore default=1] pam_exec.so quiet /usr/bin/omarchy-hw-laptop-open"
-  sudo tee /etc/pam.d/omarchy-lock-fingerprint >/dev/null <<EOF
+  # No lid gate here. This PamContext's only auth module is pam_fprintd;
+  # skipping it is PAM success and unlocks. Lid-closed skip belongs in the
+  # lock service (see #10393), not this file.
+  sudo tee /etc/pam.d/omarchy-lock-fingerprint >/dev/null <<'EOF'
 #%PAM-1.0
-$fprintd_gate
 auth       required                    pam_fprintd.so
 account    include                     system-local-login
 EOF

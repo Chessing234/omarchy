@@ -6,52 +6,46 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/base-test.sh"
 
 setup="$ROOT/bin/omarchy-setup-security-fingerprint"
 apply="$ROOT/bin/omarchy-apply-lock"
+migration="$ROOT/migrations/1789261001.sh"
 
-grep -F 'setup_lock_fingerprint_pam' "$setup" >/dev/null ||
-  fail "setup-security-fingerprint still defines setup_lock_fingerprint_pam"
+# sudo/polkit still get the silent lid-open gate; the lock PAM file must not.
+grep -A30 'setup_pam_with_fprintd\|fprintd_gate\|pam.d/sudo' "$setup" | grep -Fq 'omarchy-hw-laptop-open' ||
+  fail "fingerprint setup still gates sudo/polkit with omarchy-hw-laptop-open"
 
-# Extract the lock PAM writer by grepping the function body for the gate.
-grep -A20 'setup_lock_fingerprint_pam()' "$setup" | grep -Fq 'omarchy-hw-laptop-open' ||
-  fail "setup_lock_fingerprint_pam writes the clamshell pam_exec gate"
-
-grep -A20 'setup_lock_fingerprint_pam()' "$setup" | grep -Fq 'pam_fprintd.so' ||
-  fail "setup_lock_fingerprint_pam still requires pam_fprintd"
-
-# Gate must come before pam_fprintd in the generated lock stack.
-python3 - "$setup" <<'PY' || fail "lock PAM gate is ordered before pam_fprintd in setup"
-import pathlib, re, sys
+python3 - "$setup" <<'PY' || fail "setup_lock_fingerprint_pam must not write a lid gate"
+import pathlib, sys
 text = pathlib.Path(sys.argv[1]).read_text()
-m = re.search(r"setup_lock_fingerprint_pam\(\) \{(.*?)^\}", text, re.S | re.M)
-body = m.group(1)
-if "omarchy-hw-laptop-open" not in body:
-    raise SystemExit(1)
-# In the heredoc / tee payload, gate line must appear before pam_fprintd.
-idx_gate = body.find("omarchy-hw-laptop-open")
-idx_fp = body.find("pam_fprintd.so")
-if idx_gate < 0 or idx_fp < 0 or idx_gate > idx_fp:
-    raise SystemExit(1)
+start = text.find("setup_lock_fingerprint_pam()")
+if start < 0:
+    raise SystemExit("setup_lock_fingerprint_pam missing")
+# Next top-level function or end of interesting block
+body = text[start : start + 800]
+if "omarchy-hw-laptop-open" in body:
+    raise SystemExit("lock setup still references omarchy-hw-laptop-open")
+if "pam_fprintd.so" not in body:
+    raise SystemExit("lock setup must still write pam_fprintd")
 PY
-pass "setup lock fingerprint PAM includes an ordered clamshell gate"
+pass "setup writes ungated lock fingerprint PAM"
 
-grep -Fq 'omarchy-hw-laptop-open' "$apply" ||
-  fail "apply-lock writes the clamshell gate into omarchy-lock-fingerprint"
-# Order inside apply-lock heredoc
-python3 - "$apply" <<'PY' || fail "apply-lock orders the gate before pam_fprintd"
+python3 - "$apply" <<'PY' || fail "apply-lock must not gate omarchy-lock-fingerprint"
 import pathlib, sys
 text = pathlib.Path(sys.argv[1]).read_text()
 start = text.find("omarchy-lock-fingerprint")
-chunk = text[start:start+800]
-if chunk.find("omarchy-hw-laptop-open") > chunk.find("pam_fprintd.so"):
-    raise SystemExit(1)
-if "omarchy-hw-laptop-open" not in chunk:
-    raise SystemExit(1)
+if start < 0:
+    raise SystemExit("apply-lock missing lock fingerprint path")
+chunk = text[start : start + 500]
+if "omarchy-hw-laptop-open" in chunk:
+    raise SystemExit("apply-lock still writes the lid gate into lock PAM")
+if "pam_fprintd.so" not in chunk:
+    raise SystemExit("apply-lock must still write pam_fprintd")
 PY
-pass "apply-lock lock fingerprint PAM includes an ordered clamshell gate"
+pass "apply-lock writes ungated lock fingerprint PAM"
 
-migration="$ROOT/migrations/1789261001.sh"
-[[ -f $migration ]] || fail "migration repairs existing lock fingerprint PAM"
 grep -Fq 'omarchy-lock-fingerprint' "$migration" ||
   fail "migration targets omarchy-lock-fingerprint"
 grep -Fq 'omarchy-hw-laptop-open' "$migration" ||
-  fail "migration inserts the laptop-closed gate"
-pass "migration installs the lock fingerprint clamshell gate on existing installs"
+  fail "migration removes the laptop-open gate"
+grep -Fq "sed -i '/omarchy-hw-laptop-open/d'" "$migration" ||
+  grep -Fq 'omarchy-hw-laptop-open/d' "$migration" ||
+  fail "migration deletes the lid-open line from lock PAM"
+pass "migration strips the unlock-on-lid-closed gate from lock PAM"
