@@ -22,6 +22,8 @@ Item {
   property bool powerSaverActive: false
   property string passwordText: ""
   property bool syncingPasswordText: false
+  // Service bumps this; each surface LockView focuses its own field.
+  property int passwordFocusRequest: 0
 
   readonly property string placeholderText: "Enter Password"
   readonly property int fieldWidth: 381
@@ -68,6 +70,9 @@ Item {
   }
 
   onPasswordTextChanged: syncPasswordText()
+  onPasswordFocusRequestChanged: {
+    if (inputEnabled) Qt.callLater(forcePasswordFocus)
+  }
   onInputEnabledChanged: {
     if (inputEnabled) Qt.callLater(forcePasswordFocus)
   }

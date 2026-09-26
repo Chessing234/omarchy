@@ -50,6 +50,9 @@ Item {
   // acquire while the first is still in flight makes Quickshell abort with
   // "Tried to show lockscreen surfaces without active lock" (#9654).
   property bool sessionLockAcquirePending: false
+  // Bumped so each LockView (inside WlSessionLockSurface's own id scope)
+  // can call forcePasswordFocus() itself — Service must not read lockView.
+  property int passwordFocusRequest: 0
 
   readonly property bool locked: lockRequested || sessionLock.locked || sessionLock.secure
   readonly property bool authenticating: authenticatingPassword || fingerprintAuthenticating
@@ -78,8 +81,7 @@ Item {
 
   function forceLockPasswordFocus() {
     if (!lockRequested) return
-    if (lockView && typeof lockView.forcePasswordFocus === "function")
-      Qt.callLater(function() { lockView.forcePasswordFocus() })
+    passwordFocusRequest += 1
   }
 
   function queueSessionLock() {
@@ -191,6 +193,18 @@ Item {
   function clearStalledLockRequest(reason) {
     if (!lockRequested) return
     if (sessionLock.locked || sessionLock.secure) return
+
+    // No physical output yet (Hyprland FALLBACK alone does not count). Keep the
+    // request pending so a later hot-plug still locks; only reset acquire flags.
+    if (!hasRealScreen()) {
+      logEvent("lock-pending: waiting-for-screen")
+      sessionLockAcquirePending = false
+      sessionLockAcquireWatchdog.stop()
+      pendingSessionLock = true
+      if (!pendingSessionLockTimer.running) pendingSessionLockTimer.start()
+      lockAcquireTimeoutTimer.restart()
+      return
+    }
 
     logEvent(reason)
     lockRequested = false
@@ -428,7 +442,6 @@ Item {
       color: Color.background
 
       LockView {
-        id: lockView
         anchors.fill: parent
         backgroundPath: root.backgroundPath
         videoPosterPath: root.videoPosterPath
@@ -442,6 +455,7 @@ Item {
         displaysBlank: root.screenBlank(lockSurface.screen ? lockSurface.screen.name : "")
         powerSaverActive: root.powerSaverActive
         passwordText: root.enteredPassword
+        passwordFocusRequest: root.passwordFocusRequest
         onPasswordTextEdited: function(password) { root.enteredPassword = password }
         onSubmitPassword: function(password) { root.submitPassword(password) }
         onClearFailureRequested: root.failureMessage = ""

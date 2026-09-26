@@ -4,6 +4,9 @@ set -euo pipefail
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/base-test.sh"
 
+TMPDIR="$(mktemp -d)"
+trap 'rm -rf "$TMPDIR"' EXIT
+
 clamshell="$ROOT/bin/omarchy-hyprland-monitor-clamshell"
 service="$ROOT/shell/plugins/lock/Service.qml"
 lock_view="$ROOT/shell/plugins/lock/LockView.qml"
@@ -32,12 +35,19 @@ grep -F 'screen.name === "FALLBACK"' "$service" >/dev/null ||
   fail "hasRealScreen rejects the Quickshell FALLBACK placeholder"
 pass "lock acquire ignores the FALLBACK placeholder screen"
 
-grep -F 'forceLockPasswordFocus' "$service" >/dev/null ||
-  fail "lock service exposes forceLockPasswordFocus"
+grep -F 'passwordFocusRequest' "$service" >/dev/null ||
+  fail "lock service exposes passwordFocusRequest for LockView"
 grep -F 'forceLockPasswordFocus()' "$service" >/dev/null ||
   fail "lock service calls forceLockPasswordFocus"
 grep -F 'root.forceLockPasswordFocus()' "$service" >/dev/null ||
   fail "onScreensChanged restores password focus"
+grep -F 'passwordFocusRequest: root.passwordFocusRequest' "$service" >/dev/null ||
+  fail "LockView binds passwordFocusRequest from Service"
+grep -F 'onPasswordFocusRequestChanged' "$lock_view" >/dev/null ||
+  fail "LockView observes passwordFocusRequest and focuses itself"
+# Must not reach into the surface component by id (ReferenceError).
+! grep -E 'lockView\.(forcePasswordFocus|forceActiveFocus)' "$service" >/dev/null ||
+  fail "Service must not call into lockView across the surface id boundary"
 pass "lock restores password focus after wake and screen changes"
 
 grep -E 'focus: true' "$lock_view" >/dev/null ||
