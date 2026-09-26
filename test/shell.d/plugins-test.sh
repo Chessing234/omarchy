@@ -212,12 +212,17 @@ check(
   '_syncServices still drops disabled or removed services'
 )
 check(
-  !!syncMatch && /if \(serviceKeepLoaded\(existingId\)\) continue/.test(syncMatch[0]),
-  '_syncServices honors keepLoaded when dropping disabled services'
+  !!syncMatch && /shouldRetainDisabledKeepLoaded\(existingId/.test(syncMatch[0]),
+  '_syncServices retains disabled keepLoaded services only while locked'
 )
 check(
-  !!syncMatch && /if \(serviceKeepLoaded\(authenticationId\)\) continue/.test(syncMatch[0]),
-  '_syncServices honors keepLoaded when reconciling AuthServiceStore'
+  !!syncMatch && /shouldRetainDisabledKeepLoaded\(authenticationId/.test(syncMatch[0]),
+  '_syncServices retains disabled keepLoaded auth services only while locked'
+)
+check(
+  /function shouldRetainDisabledKeepLoaded\(/.test(shellSource) &&
+    /inst\.locked === true/.test(shellSource),
+  'disabled keepLoaded retention requires a held session lock'
 )
 
 assert(errors.length === 0, 'plugin manifests match shell registry contract', errors.join('\n'))
