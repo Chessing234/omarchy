@@ -86,6 +86,27 @@ run off >/dev/null
   fail "presentation off does not clear dnd that was already on" "$(cat "$tmpdir/dnd")"
 pass "presentation off does not undo state it did not change"
 
+# Never enabled: off must not clobber unrelated settings (defaults "restore").
+rm -f "$home/.local/state/omarchy/toggles/presentation" \
+  "$home/.local/state/omarchy/presentation-restore"
+mkdir -p "$home/.local/state/omarchy/toggles" "$home/.local/state/omarchy/indicators"
+touch "$home/.local/state/omarchy/toggles/bar-off"
+touch "$home/.local/state/omarchy/indicators/stay-awake"
+DND_STATE=on
+: >"$tmpdir/dnd"
+: >"$tmpdir/notify"
+status=$(run off)
+[[ $status == "off" ]] || fail "presentation off when never on prints off" "$status"
+[[ -f $home/.local/state/omarchy/toggles/bar-off ]] ||
+  fail "presentation off when never on leaves a hidden bar alone"
+[[ -f $home/.local/state/omarchy/indicators/stay-awake ]] ||
+  fail "presentation off when never on leaves stay-awake alone"
+[[ ! -s $tmpdir/dnd ]] ||
+  fail "presentation off when never on does not touch dnd" "$(cat "$tmpdir/dnd")"
+[[ ! -s $tmpdir/notify ]] ||
+  fail "presentation off when never on does not notify" "$(cat "$tmpdir/notify")"
+pass "presentation off is a no-op when presentation was never enabled"
+
 grep -Fq '"trigger.toggle.presentation"' "$ROOT/default/omarchy/omarchy-menu.jsonc" ||
   fail "presentation mode is on the Toggle menu"
 pass "presentation mode is on the Toggle menu"
