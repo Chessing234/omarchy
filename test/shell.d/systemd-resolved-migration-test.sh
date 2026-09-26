@@ -72,6 +72,10 @@ run_recovery() {
   stub)
     ln -sfn /run/systemd/resolve/stub-resolv.conf "$resolv"
     ;;
+  stub-relative)
+    # Exact form written by omarchy-upgrade-to-quattro.
+    ln -sfn ../run/systemd/resolve/stub-resolv.conf "$resolv"
+    ;;
   missing)
     rm -f "$resolv"
     ;;
@@ -101,6 +105,16 @@ grep -qxF "systemctl enable --now systemd-resolved.service" "$test_dir/inactive-
 [[ $(cat "$test_dir/inactive-stub.active") == 1 ]] ||
   fail "recovery leaves systemd-resolved marked active"
 pass "recovery enables systemd-resolved when the stub is inactive"
+
+# Same recovery for the relative stub link Quattro's upgrade writes.
+RESOLV_STATE=stub-relative RESOLVED_ACTIVE_INIT=0 RESOLVED_ENABLE_OK=1 \
+  run_recovery inactive-stub-relative ||
+  fail "recovery enables resolved for the upgrade's relative stub link"
+grep -qxF "systemctl enable --now systemd-resolved.service" "$test_dir/inactive-stub-relative.calls" ||
+  fail "relative stub still runs systemctl enable --now systemd-resolved.service"
+[[ $(cat "$test_dir/inactive-stub-relative.active") == 1 ]] ||
+  fail "relative stub recovery leaves systemd-resolved marked active"
+pass "recovery enables systemd-resolved for the upgrade's relative stub link"
 
 # Already active: no enable.
 RESOLV_STATE=stub RESOLVED_ACTIVE_INIT=1 \

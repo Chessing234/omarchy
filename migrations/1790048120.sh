@@ -14,8 +14,11 @@ as_root() {
 uses_stub_resolv() {
   [[ -L /etc/resolv.conf ]] || return 1
   local target
+  # Quattro's upgrade writes a relative target; other hosts use absolute. Compare
+  # the readlink text itself so we do not need the stub file to exist yet.
   target=$(readlink /etc/resolv.conf)
-  [[ $target == /run/systemd/resolve/stub-resolv.conf ]]
+  [[ $target == /run/systemd/resolve/stub-resolv.conf ||
+    $target == ../run/systemd/resolve/stub-resolv.conf ]]
 }
 
 if ! uses_stub_resolv; then
