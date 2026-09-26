@@ -1,15 +1,12 @@
-echo "Gate lock-screen fingerprint auth behind the lid state"
+echo "Drop the lid gate from lock-screen fingerprint PAM"
 
-# Existing fingerprint setups write /etc/pam.d/omarchy-lock-fingerprint with
-# pam_fprintd alone. With the lid shut the lock screen still hammers the
-# unreachable reader. Insert the same pam_exec gate sudo/polkit already use.
-# New setups get this from omarchy-setup-security-fingerprint / omarchy-apply-lock.
+# An earlier revision of this migration (and setup/apply-lock) inserted
+# omarchy-hw-laptop-open with [success=ignore default=1] before pam_fprintd.
+# On the lock PamContext that skip is PAM success and unlocks with the lid
+# closed. Remove the gate; lid policy stays in the lock service (#10393).
 
-gate="auth      [success=ignore default=1] pam_exec.so quiet /usr/bin/omarchy-hw-laptop-open"
 pam=/etc/pam.d/omarchy-lock-fingerprint
 
-if [[ -f $pam ]] &&
-  grep -q 'pam_fprintd\.so' "$pam" &&
-  ! grep -q 'omarchy-hw-laptop-open' "$pam"; then
-  sudo sed -i "/pam_fprintd\.so/i $gate" "$pam"
+if [[ -f $pam ]] && grep -q 'omarchy-hw-laptop-open' "$pam"; then
+  sudo sed -i '/omarchy-hw-laptop-open/d' "$pam"
 fi
