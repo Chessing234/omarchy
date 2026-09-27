@@ -23,14 +23,20 @@ fi
 # A healthy CUPS server with no configured printers reports this condition on
 # stderr and exits 1. Treat that as an empty queue list; every other failure
 # keeps the migration pending so it can be retried.
-# LANGUAGE overrides LC_ALL for gettext, so pin LANGUAGE/LC_MESSAGES too.
-# Otherwise a non-English locale still prints a translated empty-queue
-# message and this migration fails with no printers configured.
+# CUPS picks lpstat's message language itself; in the C locale it reads
+# LC_MESSAGES before LC_ALL, so pin LC_MESSAGES too. LANGUAGE=C is harmless.
 if queue_report=$(LC_ALL=C LANGUAGE=C LC_MESSAGES=C lpstat -v 2>&1); then
   :
-elif [[ $queue_report == "lpstat: No destinations added." ||
-  $queue_report == "lpstat: Scheduler is not running." ]]; then
-  # Empty or CUPS-down: nothing to scrub; still drop cups-browsed below.
+elif [[ $queue_report == "lpstat: No destinations added." ]]; then
+  queue_report=""
+elif [[ $queue_report == "lpstat: Scheduler is not running." ]]; then
+  # lpstat cannot list queues while CUPS is down. Saved implicitclass://
+  # entries in printers.conf would survive cups-browsed removal, so retry
+  # rather than mark the migration complete.
+  if grep -q 'implicitclass://' /etc/cups/printers.conf 2>/dev/null; then
+    echo "CUPS is down but discovery queues remain in printers.conf; retry later." >&2
+    exit 1
+  fi
   queue_report=""
 else
   printf '%s\n' "$queue_report" >&2
