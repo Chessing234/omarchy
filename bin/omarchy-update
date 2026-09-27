@@ -17,6 +17,15 @@ omarchy_security_require_privileged_bash_startup || exit 126
 set -e
 omarchy_security_sanitize_bash_environment "$0" "$@"
 omarchy_security_require_source_root "$0"
+# Privileged package steps escalate via sudo from an unprivileged caller.
+# Running the whole update as root (sudo omarchy update) makes mise/hooks
+# write root-owned files into the user's home (#13329). Refuse that shape
+# before any log, lock, or user-phase work begins.
+if (( EUID == 0 )); then
+  echo "Error: run omarchy-update as your user, not under sudo." >&2
+  echo "It asks for a password when a step needs privilege." >&2
+  exit 1
+fi
 # Logging and lock acquisition re-exec this command with a sanitized PATH.
 # Preserve the caller's path only for the later hook/mise phases.
 user_path=${OMARCHY_UPDATE_USER_PATH:-$PATH}
