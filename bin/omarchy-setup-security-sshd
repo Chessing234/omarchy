@@ -94,17 +94,23 @@ CONF
   if ! sudo sshd -t; then
     echo -e "\e[31msshd rejected the localhost bind config; removing it.\e[0m" >&2
     sudo rm -f "$config"
-    return 1
+    return 0
   fi
 
   local effective_config
-  if ! effective_config=$(sudo sshd -T) ||
-    ! grep -Eiq '^listenaddress[[:space:]]+127\.0\.0\.1$' <<<"$effective_config" ||
-    ! grep -Eiq '^listenaddress[[:space:]]+(::1|\[::1\])$' <<<"$effective_config"; then
+  if ! effective_config=$(sudo sshd -T); then
+    echo -e "\e[31mcould not read effective sshd config; removing the bind config.\e[0m" >&2
+    sudo rm -f "$config"
+    return 1
+  fi
+  if ! grep -Eiq '^listenaddress[[:space:]]+127\.0\.0\.1(:[0-9]+)?$' <<<"$effective_config" ||
+    ! grep -Eiq '^listenaddress[[:space:]]+(\[::1\]|::1)(:[0-9]+)?$' <<<"$effective_config"; then
     echo -e "\e[31msshd is not listening on loopback only; removing the bind config.\e[0m" >&2
     sudo rm -f "$config"
     return 1
   fi
+
+  echo "Localhost bind only."
 }
 
 start_sshd() {
