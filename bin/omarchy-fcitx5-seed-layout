@@ -149,6 +149,10 @@ if systemctl --user is-active --quiet omarchy-fcitx5.service 2>/dev/null ||
     pgrep -x fcitx5 >/dev/null 2>&1 || break
     sleep 0.1
   done
+  if pgrep -x fcitx5 >/dev/null 2>&1; then
+    echo "fcitx5 still running after stop; not rewriting profile" >&2
+    exit 1
+  fi
 fi
 
 write_profile
