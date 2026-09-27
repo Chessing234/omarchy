@@ -5,6 +5,6 @@
 
 set -euo pipefail
 
-if [[ -x /usr/bin/btop ]] && command -v setcap >/dev/null 2>&1; then
+if [[ -x /usr/bin/btop ]] && omarchy-cmd-present setcap; then
   setcap -r /usr/bin/btop || true
 fi
