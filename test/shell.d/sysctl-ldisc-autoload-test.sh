@@ -25,5 +25,11 @@ grep -q '99-omarchy-sysctl.conf' "$migration" ||
   fail "migration loads the omarchy sysctl drop-in specifically"
 grep -q 'sysctl -p' "$migration" ||
   fail "migration applies the drop-in at runtime rather than only on next boot"
+grep -q 'omarchy-state set reboot-required' "$migration" ||
+  fail "migration falls back to reboot-required when sysctl -p fails"
+grep -q 'dev.tty.ldisc_autoload' "$migration" ||
+  fail "migration skips when the runtime value is already 0"
+! grep -Eq '\|\| true' "$migration" ||
+  fail "migration must not hide sysctl/sudo failures with || true"
 
 pass "migration reapplies the sysctl drop-in without waiting for reboot"
