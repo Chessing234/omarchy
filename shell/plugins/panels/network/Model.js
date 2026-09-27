@@ -359,7 +359,7 @@ var enterpriseConnectScript =
 
 function networkFailureReason(reason, needsCredentials, reasons, isEnterprise) {
   var r = reasons || {}
-  if (needsCredentials && reason === r.NoSecrets) return "Passphrase required"
+  if (needsCredentials && reason === r.NoSecrets) return "Wrong password"
   // PSK timeouts usually mean a bad passphrase. Enterprise timeouts commonly
   // mean a slow RADIUS round-trip, so do not call them a wrong password.
   if (needsCredentials && reason === r.WifiAuthTimeout)
