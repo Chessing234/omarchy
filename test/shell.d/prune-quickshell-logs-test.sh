@@ -26,15 +26,18 @@ printf 'live\n' >"$by_id/$live_id/log.log"
 
 # A live by-pid symlink whose pid is this test shell keeps its instance.
 ln -s "$by_id/$live_id" "$by_pid/$$"
-# A dead pid leaves a dangling symlink that must be removed with its dir.
-ln -s "$by_id/$stale_id" "$by_pid/1"
+# A pid known to be gone (do not use 1: kill(2) can succeed on PID 1 as root).
+sleep 0 &
+dead_pid=$!
+wait "$dead_pid"
+ln -s "$by_id/$stale_id" "$by_pid/$dead_pid"
 
 XDG_RUNTIME_DIR="$runtime" "$prune"
 
 [[ -d $by_id/$live_id ]] || fail "prune keeps the instance for a live by-pid symlink"
 [[ ! -e $by_id/$stale_id ]] || fail "prune removes instance dirs for dead pids"
 [[ -L $by_pid/$$ ]] || fail "prune keeps the live by-pid symlink"
-[[ ! -e $by_pid/1 && ! -L $by_pid/1 ]] || fail "prune removes by-pid links for dead pids"
+[[ ! -e $by_pid/$dead_pid && ! -L $by_pid/$dead_pid ]] || fail "prune removes by-pid links for dead pids"
 pass "prune keeps live Quickshell instance dirs and drops stale ones"
 
 # No by-pid dir: everything under by-id is stale.
