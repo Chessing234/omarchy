@@ -12,6 +12,23 @@ as_root() {
 # stub resolv.conf. Swallowing a failed restart left machines with the symlink
 # and an inactive unit (#8395). Fail the migration rather than continue blind.
 ensure_systemd_resolved() {
+  # Already running: do not require sudo (other accounts on an upgraded host).
+  if systemctl is-active --quiet systemd-resolved.service 2>/dev/null; then
+    return 0
+  fi
+
+  # Without the stub symlink, DNS does not depend on resolved for this path.
+  if [[ -L /etc/resolv.conf ]]; then
+    local target
+    target=$(readlink /etc/resolv.conf)
+    if [[ $target != /run/systemd/resolve/stub-resolv.conf &&
+      $target != ../run/systemd/resolve/stub-resolv.conf ]]; then
+      return 0
+    fi
+  else
+    return 0
+  fi
+
   as_root systemctl enable --now systemd-resolved.service
   if ! systemctl is-active --quiet systemd-resolved.service; then
     echo "Failed to start systemd-resolved; DNS will be broken until it is running." >&2
