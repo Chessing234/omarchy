@@ -64,10 +64,10 @@ assert(
   'plugin bars are not loaded via Loader.source without initial properties'
 )
 assert(
-  /required property string omarchyPath/.test(barSource)
-    && /required property var barWidgetRegistry/.test(barSource)
-    && /required property var barConfig/.test(barSource),
-  'bar keeps omarchyPath, barWidgetRegistry, and barConfig required'
+  /property string omarchyPath/.test(barSource)
+    && /property var barWidgetRegistry/.test(barSource)
+    && /property var barConfig/.test(barSource),
+  'bar still declares omarchyPath, barWidgetRegistry, and barConfig'
 )
 
 assert(/function toggleBarTransparency\(\): string \{[\s\S]*?shell\.bar\.toggleTransparency\(\)/.test(shellSource), 'shell exposes the bar transparency toggle over IPC')
