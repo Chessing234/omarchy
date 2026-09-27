@@ -163,7 +163,7 @@ gsr_kms_has_sys_admin() {
   local caps
 
   [[ -x /usr/bin/gsr-kms-server ]] || return 1
-  command -v getcap >/dev/null 2>&1 || return 1
+  omarchy-cmd-present getcap || return 1
   caps=$(getcap /usr/bin/gsr-kms-server 2>/dev/null) || return 1
   [[ $caps == *cap_sys_admin* || $caps == *CAP_SYS_ADMIN* ]]
 }
