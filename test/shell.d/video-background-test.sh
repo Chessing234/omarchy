@@ -115,7 +115,7 @@ assert(
   'a theme switch that keeps the video path still reopens the replaced file'
 )
 assert(
-  barTextColor.includes('magick "$background_path[0]"'),
+  barTextColor.includes('magick "${background_path}[0]"'),
   'bar colour sampling reads one frame instead of decoding a whole video'
 )
 assert(
