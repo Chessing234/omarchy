@@ -17,6 +17,13 @@ grep -Eq 'preauth deny=10 unlock_time=120' "$install_script" ||
   fail "install script must not keep preauth silent" "$(grep preauth "$install_script" || true)"
 pass "install script drops silent from pam_faillock preauth"
 
+sudoers="$ROOT/etc/sudoers.d/omarchy-passwd-tries"
+[[ -f $sudoers ]] || fail "passwd_tries sudoers drop-in is present"
+grep -Eq '^Defaults[[:space:]]+!pam_silent[[:space:]]*$' "$sudoers" ||
+  fail "sudoers clears pam_silent so faillock messages reach the terminal" "$(cat "$sudoers")"
+pass "sudoers allows pam_faillock messages through sudo"
+
+
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
 
