@@ -21,12 +21,25 @@ variant=${variant%%,*}
 # them. Only rebuild when a Latin layout (or Latin variant of rs) applies.
 omarchy_layout_is_non_latin "$layout" "$variant" && exit 0
 
-# Nothing changed and the hooks already exclude non-Latin; still rebuild when
-# we just wrote XKBLAYOUT so an existing UKI picks it up.
-(( OMARCHY_VCONSOLE_XKB_CHANGED == 1 )) || exit 0
+pending_dir="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy"
+pending="$pending_dir/vconsole-xkb-pending-rebuild"
+
+# A failed limine/mkinitcpio run must not mark this migration complete on retry
+# when XKBLAYOUT is already set and CHANGED stays 0.
+if (( OMARCHY_VCONSOLE_XKB_CHANGED == 1 )); then
+  mkdir -p "$pending_dir"
+  : >"$pending"
+fi
+
+[[ -f $pending ]] || exit 0
 
 if omarchy-cmd-present limine-mkinitcpio; then
   sudo limine-mkinitcpio
 elif omarchy-cmd-present limine-update; then
   sudo limine-update
+else
+  echo "No limine rebuild command available; leaving pending rebuild flag." >&2
+  exit 1
 fi
+
+rm -f "$pending"
