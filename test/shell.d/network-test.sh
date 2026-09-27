@@ -253,7 +253,7 @@ assert(
 )
 
 const reasons = { NoSecrets: 1, WifiAuthTimeout: 2, WifiNetworkLost: 3, WifiClientDisconnected: 4, WifiClientFailed: 5 }
-assertEqual(network.networkFailureReason(reasons.NoSecrets, true, reasons), 'Passphrase required', 'network maps missing credential failures')
+assertEqual(network.networkFailureReason(reasons.NoSecrets, true, reasons), 'Wrong password', 'network maps missing credential failures')
 assertEqual(network.networkFailureReason(reasons.WifiAuthTimeout, true, reasons), 'Wrong password', 'network maps credentialed auth timeouts')
 assertEqual(network.networkFailureReason(reasons.WifiAuthTimeout, true, reasons, true), 'Connection timed out', 'network does not call enterprise timeouts a wrong password')
 assertEqual(network.networkFailureReason(reasons.NoSecrets, false, reasons), 'Failed to connect', 'network gives passwordless missing-secret failures generic copy')
