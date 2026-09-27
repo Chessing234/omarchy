@@ -53,6 +53,7 @@ resolve() {
 case "$1" in
   -Qq)
     shift
+    [[ ${1:-} == -- ]] && shift
     found=0
     for query in "$@"; do
       if out=$(resolve "$query"); then
@@ -63,7 +64,9 @@ case "$1" in
     (( found ))
     ;;
   -Q)
-    resolve "$2" >/dev/null
+    shift
+    [[ ${1:-} == -- ]] && shift
+    resolve "${1:-}" >/dev/null
     ;;
   -S)
     printf 'pacman %s\n' "$*" >> "$CALL_LOG"
