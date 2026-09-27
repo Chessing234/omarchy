@@ -71,6 +71,12 @@ reload_sshd_if_active() {
   fi
 }
 
+ensure_host_keys() {
+  # sshd -t/-T exit before validating drop-ins when no host keys exist yet
+  # (fresh install / factory reset). sshdgenkeys normally runs on first start.
+  sudo ssh-keygen -A >/dev/null
+}
+
 bind_localhost() {
   local config=/etc/ssh/sshd_config.d/20-omarchy-localhost.conf
 
@@ -88,7 +94,16 @@ CONF
   if ! sudo sshd -t; then
     echo -e "\e[31msshd rejected the localhost bind config; removing it.\e[0m" >&2
     sudo rm -f "$config"
-    return 0
+    return 1
+  fi
+
+  local effective_config
+  if ! effective_config=$(sudo sshd -T) ||
+    ! grep -Eiq '^listenaddress[[:space:]]+127\.0\.0\.1$' <<<"$effective_config" ||
+    ! grep -Eiq '^listenaddress[[:space:]]+(::1|\[::1\])$' <<<"$effective_config"; then
+    echo -e "\e[31msshd is not listening on loopback only; removing the bind config.\e[0m" >&2
+    sudo rm -f "$config"
+    return 1
   fi
 }
 
@@ -238,8 +253,12 @@ else
 fi
 
 install_openssh
-bind_localhost
-disable_password_auth
+ensure_host_keys
+bind_localhost || exit 1
+if ! disable_password_auth; then
+  sudo rm -f /etc/ssh/sshd_config.d/20-omarchy-localhost.conf
+  exit 1
+fi
 start_sshd
 open_firewall
 
