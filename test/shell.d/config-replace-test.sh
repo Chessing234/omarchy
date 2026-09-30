@@ -18,6 +18,36 @@ cmp -s "$TEST_CONTENT" "$TEST_TARGET" || fail "atomic replacement publishes comp
 [[ $(stat -c '%u:%g:%a' "$TEST_TARGET") == "$metadata" ]] || fail "replacement preserves owner/group/mode"
 pass "atomic replacement updates the symlink target with its original metadata"
 
+# Metadata must survive inode replacement, not just the content and mode.
+if python3 -c 'import os; assert hasattr(os, "setxattr")' >/dev/null 2>&1; then
+  python3 -c 'import os,sys; os.setxattr(sys.argv[1], "user.omarchy-test", b"keep")' "$TEST_TARGET"
+  bash "$ROOT/bin/omarchy-config-replace" "$TEST_CONTENT" "$case_root/config-link"
+  python3 -c 'import os,sys; assert os.getxattr(sys.argv[1], "user.omarchy-test") == b"keep"' "$TEST_TARGET" || fail "extended attribute survives replacement"
+  pass "atomic replacement retains extended attributes"
+elif command -v xattr >/dev/null; then
+  xattr -w user.omarchy-test keep "$TEST_TARGET"
+  bash "$ROOT/bin/omarchy-config-replace" "$TEST_CONTENT" "$case_root/config-link"
+  [[ $(xattr -p user.omarchy-test "$TEST_TARGET") == keep ]] || fail "extended attribute survives replacement"
+  pass "atomic replacement retains extended attributes"
+else
+  skip "extended attributes require Python xattr support or xattr utility"
+fi
+
+# Atomic publication needs a writable directory even if the file is writable.
+# Refuse safely instead of falling back to truncating the live file.
+if (( EUID != 0 )); then
+  cp "$TEST_TARGET" "$case_root/before"
+  chmod 500 "$case_root/dotfiles"
+  status=0
+  bash "$ROOT/bin/omarchy-config-replace" "$TEST_CONTENT" "$case_root/config-link" >"$case_root/output" 2>&1 || status=$?
+  chmod 700 "$case_root/dotfiles"
+  (( status != 0 )) || fail "restricted directory must refuse atomic replacement"
+  cmp -s "$TEST_TARGET" "$case_root/before" || fail "restricted directory preserves original content"
+  pass "restricted directory refuses safely without truncating the live config"
+else
+  skip "restricted directory permission test requires a non-root user"
+fi
+
 for failure in copy metadata rename; do
   printf 'original content\n' >"$TEST_TARGET"
   cp "$TEST_TARGET" "$case_root/before"

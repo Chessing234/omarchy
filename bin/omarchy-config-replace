@@ -19,5 +19,5 @@ target=$(realpath -e -- "$config")
 stage=$(mktemp "$(dirname "$target")/.omarchy-config.XXXXXX")
 trap 'rm -f -- "$stage"' EXIT
 cat -- "$source" >"$stage"
-cp --attributes-only --preserve=mode,ownership -- "$target" "$stage"
+cp --attributes-only --preserve=mode,ownership,xattr -- "$target" "$stage"
 mv -fT -- "$stage" "$target"
