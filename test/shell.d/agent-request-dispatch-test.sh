@@ -3,6 +3,7 @@
 set -euo pipefail
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/base-test.sh"
+require_command python3
 
 test_tmp=$(mktemp -d)
 trap 'rm -rf "$test_tmp"' EXIT
@@ -17,7 +18,7 @@ printf 'claude\n' >"$test_home/.config/omarchy/defaults/agent"
 
 cat >"$mock_bin/omarchy-cmd-missing" <<'SH'
 #!/bin/bash
-exit 1
+exit "${OMARCHY_TEST_MISSING_STATUS:-1}"
 SH
 
 cat >"$mock_bin/omarchy-launch-tui" <<'SH'
@@ -39,10 +40,19 @@ run_agent() {
     "$ROOT/bin/omarchy-agent" "$@"
 }
 
+assert_launch() {
+  python3 - "$launch_log" "$@" <<'PYTEST'
+import pathlib, sys
+actual = pathlib.Path(sys.argv[1]).read_bytes().split(b'\0')
+expected = [arg.encode() for arg in sys.argv[2:]] + [b'']
+assert actual == expected, (actual, expected)
+PYTEST
+}
+
 # No dispatcher: prompted launch still reaches the harness.
 : >"$launch_log"
 run_agent --inline --prompt 'review this; echo $(whoami)'
-grep -Fz $'claude\0--permission-mode\0auto\0--\0review this; echo $(whoami)' "$launch_log" >/dev/null ||
+assert_launch 'claude' '--permission-mode' 'auto' '--' 'review this; echo $(whoami)' ||
   fail "prompted launch without a dispatcher still reaches the default harness" "$(tr '\0' ' ' <"$launch_log")"
 pass "prompted launch without a dispatcher still reaches the default harness"
 
@@ -57,7 +67,7 @@ chmod +x "$test_home/.config/omarchy/agents/request-dispatch"
 : >"$launch_log"
 run_agent --inline
 [[ ! -s $dispatch_log ]] || fail "promptless launch consulted the request dispatcher"
-grep -Fz $'claude\0--permission-mode\0auto' "$launch_log" >/dev/null ||
+assert_launch 'claude' '--permission-mode' 'auto' ||
   fail "promptless launch still reaches the default harness" "$(tr '\0' ' ' <"$launch_log")"
 pass "promptless launch ignores the request dispatcher"
 
@@ -89,6 +99,30 @@ grep -Fq 'prompt:review this; echo $(whoami)' "$dispatch_log" ||
   fail "accepted dispatcher still launched the fallback harness" "$(tr '\0' ' ' <"$launch_log")"
 pass "accepted dispatcher owns the prompted request"
 
+# An accepting dispatcher does not require the fallback to be installed.
+: >"$launch_log"
+OMARCHY_TEST_MISSING_STATUS=0 run_agent --inline --prompt 'handled elsewhere'
+[[ ! -s $launch_log ]] || fail "missing fallback was launched after acceptance"
+pass "dispatcher accepts with an unavailable fallback"
+
+# Failure after dispatch may mean work already started. Never retry it here.
+for failure in 1 127 143; do
+  cat >"$test_home/.config/omarchy/agents/request-dispatch" <<SH
+#!/bin/bash
+cat >/dev/null
+exit $failure
+SH
+  : >"$launch_log"
+  if run_agent --inline --prompt 'do not duplicate'; then
+    fail "dispatcher failure was reported as success"
+  else
+    actual_status=$?
+    [[ $actual_status == "$failure" ]] || fail "dispatcher status was lost"
+  fi
+  [[ ! -s $launch_log ]] || fail "failed dispatcher launched duplicate work"
+done
+pass "dispatcher failures stop without fallback"
+
 # A clean decline falls through to the harness.
 cat >"$test_home/.config/omarchy/agents/request-dispatch" <<'SH'
 #!/bin/bash
@@ -98,11 +132,11 @@ SH
 chmod +x "$test_home/.config/omarchy/agents/request-dispatch"
 : >"$launch_log"
 run_agent --inline --prompt 'please handle'
-grep -Fz $'claude\0--permission-mode\0auto\0--\0please handle' "$launch_log" >/dev/null ||
+assert_launch 'claude' '--permission-mode' 'auto' '--' 'please handle' ||
   fail "declined dispatcher does not fall through to the harness" "$(tr '\0' ' ' <"$launch_log")"
 pass "declined dispatcher falls through to the default harness"
 
-# Other-owned or non-executable hooks are ignored.
+# Non-executable hooks are ignored. Other ownership is not exercised here.
 cat >"$test_home/.config/omarchy/agents/request-dispatch" <<'SH'
 #!/bin/bash
 printf 'ran\n' >>"$OMARCHY_TEST_DISPATCH_LOG"
@@ -113,6 +147,6 @@ chmod a-x "$test_home/.config/omarchy/agents/request-dispatch"
 : >"$launch_log"
 run_agent --inline --prompt 'noexec'
 [[ ! -s $dispatch_log ]] || fail "non-executable dispatcher was consulted"
-grep -Fz $'claude\0--permission-mode\0auto\0--\0noexec' "$launch_log" >/dev/null ||
+assert_launch 'claude' '--permission-mode' 'auto' '--' 'noexec' ||
   fail "non-executable dispatcher blocked the fallback" "$(tr '\0' ' ' <"$launch_log")"
 pass "non-executable dispatcher is ignored"
