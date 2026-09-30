@@ -136,7 +136,7 @@ assert_launch 'claude' '--permission-mode' 'auto' '--' 'please handle' ||
   fail "declined dispatcher does not fall through to the harness" "$(tr '\0' ' ' <"$launch_log")"
 pass "declined dispatcher falls through to the default harness"
 
-# Non-executable hooks are ignored. Other ownership is not exercised here.
+# Non-executable hooks are ignored.
 cat >"$test_home/.config/omarchy/agents/request-dispatch" <<'SH'
 #!/bin/bash
 printf 'ran\n' >>"$OMARCHY_TEST_DISPATCH_LOG"
@@ -150,3 +150,35 @@ run_agent --inline --prompt 'noexec'
 assert_launch 'claude' '--permission-mode' 'auto' '--' 'noexec' ||
   fail "non-executable dispatcher blocked the fallback" "$(tr '\0' ' ' <"$launch_log")"
 pass "non-executable dispatcher is ignored"
+
+# Follow a real executable owned by another uid: exercise Bash's actual -O test.
+if [[ -f /usr/bin/true && -x /usr/bin/true && ! -O /usr/bin/true ]]; then
+  rm "$test_home/.config/omarchy/agents/request-dispatch"
+  ln -s /usr/bin/true "$test_home/.config/omarchy/agents/request-dispatch"
+  : >"$launch_log"
+  run_agent --inline --prompt 'other-owner'
+  assert_launch 'claude' '--permission-mode' 'auto' '--' 'other-owner' ||
+    fail "another owner's executable must not claim the request"
+  pass "another owner's executable is ignored"
+else
+  printf 'ok - other-owner executable # SKIP no different-owner fixture available\n'
+fi
+
+# Disabling a broken dispatcher restores normal launches without retrying it.
+rm "$test_home/.config/omarchy/agents/request-dispatch"
+cat >"$test_home/.config/omarchy/agents/request-dispatch" <<'SH'
+#!/bin/bash
+exit 126
+SH
+chmod +x "$test_home/.config/omarchy/agents/request-dispatch"
+: >"$launch_log"
+if run_agent --inline --prompt 'broken-dispatcher'; then
+  fail "broken dispatcher must stop the current request"
+else
+  [[ $? == 126 && ! -s $launch_log ]] || fail "broken dispatcher status or ownership was lost"
+fi
+mv "$test_home/.config/omarchy/agents/request-dispatch" "$test_home/.config/omarchy/agents/request-dispatch.disabled"
+run_agent --inline --prompt 'new-request'
+assert_launch 'claude' '--permission-mode' 'auto' '--' 'new-request' ||
+  fail "disabled dispatcher must permit a new normal launch"
+pass "disabling a broken dispatcher restores new launches"
