@@ -136,6 +136,18 @@ pi)
   ;;
 esac
 
+# A small receipt for hooks, panels, and skills that need to know which harness
+# Omarchy just started without scraping the process tree. Best-effort only —
+# a full disk must not block the launch.
+receipt_dir="${XDG_RUNTIME_DIR:-/run/user/$UID}/omarchy"
+mkdir -p "$receipt_dir" 2>/dev/null || true
+{
+  printf 'OMARCHY_AGENT=%q\n' "$agent"
+  printf 'OMARCHY_AGENT_CWD=%q\n' "$PWD"
+  printf 'OMARCHY_AGENT_STARTED_AT=%q\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  printf 'OMARCHY_AGENT_INLINE=%q\n' "$inline"
+} >"$receipt_dir/agent-session.env" 2>/dev/null || true
+
 if [[ $inline == "true" ]]; then
   exec "${command[@]}"
 else
