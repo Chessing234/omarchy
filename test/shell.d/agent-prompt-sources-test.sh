@@ -70,3 +70,34 @@ pass "empty clipboard is refused"
 : >"$agent_log"
 run_prompt "$ROOT/bin/omarchy-agent-prompt" --inline "keep argv prompts"
 expect_args "argv prompts still work alongside the new sources" --inline --prompt "keep argv prompts"
+
+: >"$agent_log"
+run_prompt "$ROOT/bin/omarchy-agent-prompt" '--disable-sandbox is literal prompt text'
+expect_args "option-like prompt text is preserved" --prompt '--disable-sandbox is literal prompt text'
+
+: >"$agent_log"
+if printf '' | run_prompt "$ROOT/bin/omarchy-agent-prompt" - 2>"$test_tmp/err"; then
+  fail "empty stdin still launched an agent"
+fi
+if [[ -s $agent_log ]] || ! grep -Fq 'Prompt on stdin was empty' "$test_tmp/err"; then
+  fail "empty stdin must explain the failure without launching" "$(cat "$test_tmp/err")"
+fi
+pass "empty stdin is refused before launch"
+
+cat >"$mock_bin/wl-paste" <<'SH'
+#!/bin/bash
+printf 'partial selection'
+echo 'synthetic clipboard connection failure' >&2
+exit 1
+SH
+chmod +x "$mock_bin/wl-paste"
+: >"$agent_log"
+if run_prompt "$ROOT/bin/omarchy-agent-prompt" --clipboard 2>"$test_tmp/err"; then
+  fail "failed clipboard read still launched an agent"
+fi
+if [[ -s $agent_log ]] || ! grep -Fq 'Unable to read clipboard' "$test_tmp/err" ||
+  ! grep -Fq 'synthetic clipboard connection failure' "$test_tmp/err" ||
+  grep -Fq 'Clipboard is empty' "$test_tmp/err"; then
+  fail "clipboard failure must retain its cause without launching" "$(cat "$test_tmp/err")"
+fi
+pass "clipboard command failure is distinguished from an empty selection"
