@@ -63,3 +63,50 @@ if install_tui 'Invalid command' 'echo "unterminated' float someicon 2>"$test_tm
 fi
 [[ ! -e $applications/'Invalid command.desktop' ]] || fail "invalid command must not publish a launcher"
 pass "malformed command quoting is rejected before publishing a launcher"
+
+stub_bin="$test_tmp/bin"
+mkdir -p "$stub_bin"
+cat >"$stub_bin/curl" <<'SH'
+#!/bin/bash
+while (( $# )); do
+  if [[ $1 == -o ]]; then
+    cp "$OMARCHY_TEST_ICON_INPUT" "$2"
+    exit "${OMARCHY_TEST_CURL_EXIT:-0}"
+  fi
+  shift
+done
+exit 99
+SH
+printf '#!/bin/bash\nexit 0\n' >"$stub_bin/gtk-update-icon-cache"
+chmod +x "$stub_bin/"*
+export PATH="$stub_bin:$PATH"
+export OMARCHY_TEST_ICON_INPUT="$test_tmp/icon-input"
+printf 'not an image\n' >"$OMARCHY_TEST_ICON_INPUT"
+icon_dir="$HOME/.local/share/icons/hicolor/256x256/apps"
+mkdir -p "$icon_dir"
+printf 'existing icon\n' >"$icon_dir/remote.png"
+cp "$icon_dir/remote.png" "$test_tmp/old-icon"
+if install_tui Remote true float https://example.invalid/icon.png; then
+  fail "a non-image download must be rejected"
+fi
+cmp -s "$icon_dir/remote.png" "$test_tmp/old-icon" || fail "a rejected image must preserve the old icon"
+[[ ! -e $applications/Remote.desktop ]] || fail "a rejected icon must not create a launcher"
+pass "rejected downloaded images preserve existing icons"
+
+if OMARCHY_TEST_CURL_EXIT=22 install_tui New true float https://example.invalid/icon.png; then
+  fail "a partial failed download must be rejected"
+fi
+[[ ! -e $icon_dir/new.png ]] || fail "a failed download must not publish an icon"
+(( $(find "$icon_dir" -type f | wc -l) == 1 )) || fail "download failures must remove their temporary files"
+pass "failed downloads leave no orphaned icons or temporary files"
+
+python3 - "$OMARCHY_TEST_ICON_INPUT" <<'PY'
+import base64
+import pathlib
+import sys
+pathlib.Path(sys.argv[1]).write_bytes(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII='))
+PY
+install_tui Remote true float https://example.invalid/icon.png
+cmp -s "$icon_dir/remote.png" "$OMARCHY_TEST_ICON_INPUT" || fail "validated image content is published"
+[[ -f $applications/Remote.desktop ]] || fail "valid downloaded icon permits the launcher"
+pass "validated downloads replace the icon and create the launcher"

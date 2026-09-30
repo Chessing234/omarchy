@@ -50,8 +50,15 @@ install_user_icon() {
 }
 
 download_icon() {
-  curl -fsSL --max-time 10 -o "$2" "$1" 2>/dev/null &&
-    [[ -s $2 && $(file -b --mime-type "$2") == image/* ]]
+  local staged
+  staged=$(mktemp "${2}.XXXXXX") || return 1
+  if curl -fsSL --max-time 10 -o "$staged" "$1" 2>/dev/null &&
+    [[ -s $staged && $(file -b --mime-type "$staged") == image/* ]] &&
+    chmod 644 "$staged" && mv -f -- "$staged" "$2"; then
+    return 0
+  fi
+  rm -f -- "$staged"
+  return 1
 }
 
 desktop_string_escape() {
