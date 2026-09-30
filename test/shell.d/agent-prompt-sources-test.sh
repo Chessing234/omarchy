@@ -25,11 +25,25 @@ run_prompt() {
     "$@"
 }
 
+expect_args() {
+  local description=$1
+  shift
+  if ! python3 - "$agent_log" "$@" <<'PY'
+import sys
+got = [part.decode() for part in open(sys.argv[1], "rb").read().split(b"\0") if part]
+want = sys.argv[2:]
+if got != want:
+  raise SystemExit(f"got {got!r} want {want!r}")
+PY
+  then
+    fail "$description" "$(tr '\0' ' ' <"$agent_log")"
+  fi
+  pass "$description"
+}
+
 : >"$agent_log"
 printf 'review this; echo $(whoami)\n' | run_prompt "$ROOT/bin/omarchy-agent-prompt" -
-grep -Fz $'--prompt\0review this; echo $(whoami)' "$agent_log" >/dev/null ||
-  fail "stdin prompt (-) does not reach omarchy-agent" "$(tr '\0' ' ' <"$agent_log")"
-pass "stdin prompt (-) reaches omarchy-agent"
+expect_args "stdin prompt (-) reaches omarchy-agent" --prompt 'review this; echo $(whoami)'
 
 cat >"$mock_bin/wl-paste" <<'SH'
 #!/bin/bash
@@ -39,9 +53,7 @@ chmod +x "$mock_bin/wl-paste"
 
 : >"$agent_log"
 run_prompt "$ROOT/bin/omarchy-agent-prompt" --clipboard
-grep -Fz $'--prompt\0clipboard body; rm -rf /' "$agent_log" >/dev/null ||
-  fail "--clipboard does not reach omarchy-agent" "$(tr '\0' ' ' <"$agent_log")"
-pass "--clipboard reaches omarchy-agent"
+expect_args "--clipboard reaches omarchy-agent" --prompt 'clipboard body; rm -rf /'
 
 cat >"$mock_bin/wl-paste" <<'SH'
 #!/bin/bash
@@ -57,6 +69,4 @@ pass "empty clipboard is refused"
 
 : >"$agent_log"
 run_prompt "$ROOT/bin/omarchy-agent-prompt" --inline "keep argv prompts"
-grep -Fz $'--inline\0--prompt\0keep argv prompts' "$agent_log" >/dev/null ||
-  fail "argv prompts still work alongside the new sources" "$(tr '\0' ' ' <"$agent_log")"
-pass "argv prompts still work alongside the new sources"
+expect_args "argv prompts still work alongside the new sources" --inline --prompt "keep argv prompts"
