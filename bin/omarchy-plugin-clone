@@ -129,7 +129,7 @@ source_info=$(omarchy-plugin-catalog | jq -r --arg id "$source_id" '
 IFS=$'\t' read -r source_dir source_manifest source_name <<<"$source_info"
 
 user_part="${USER:-$(id -un)}"
-# USER can be attacker-controlled in odd environments; keep plugin ids path-safe.
+# Match the plugin remove command's ID rules before creating any files.
 [[ $user_part =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && $user_part != *..* ]] || fail "invalid username for plugin id: $user_part"
 new_id="${user_part}.${source_id#omarchy.}"
 display_name="My $source_name"
