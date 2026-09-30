@@ -13,7 +13,7 @@ set -euo pipefail
 # mirrors). Leave a non-zero exit when the floor is still unmet so a calling
 # migration is not marked done and will retry on a later update.
 
-CHROMIUM_MIN_VERSION="${OMARCHY_CHROMIUM_MIN_VERSION:-152.0.7977.82-1}"
+CHROMIUM_MIN_VERSION="152.0.7977.82-1"
 
 if ! pacman -Q chromium &>/dev/null; then
   exit 0

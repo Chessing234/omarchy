@@ -25,7 +25,8 @@ load_oauth_env() {
   return 1
 }
 
-CONF="${XDG_CONFIG_HOME:-$HOME/.config}/chromium-flags.conf"
+# Match omarchy-refresh-chromium and the Chromium account menu.
+CONF="$HOME/.config/chromium-flags.conf"
 
 if [[ ! -f $CONF ]]; then
   echo "No $CONF yet — run omarchy-refresh-chromium, then re-run this command." >&2
