@@ -37,3 +37,34 @@ grep -Fx 'agent:claude' "$env_log" ||
 grep -Fx "cwd:$test_home/Work/project" "$env_log" ||
   fail "launched agent does not see OMARCHY_AGENT_CWD" "$(cat "$env_log")"
 pass "launched agent receives OMARCHY_AGENT and OMARCHY_AGENT_CWD"
+
+# Exercise the real terminal launcher, with process/session and terminal
+# boundaries replaced so this fixture never opens a desktop window.
+cat >"$mock_bin/setsid" <<'SH'
+#!/bin/bash
+exec "$@"
+SH
+cat >"$mock_bin/uwsm-app" <<'SH'
+#!/bin/bash
+[[ $1 == "--" ]] || exit 90
+shift
+exec "$@"
+SH
+cat >"$mock_bin/xdg-terminal-exec" <<'SH'
+#!/bin/bash
+[[ $1 == "--app-id=org.omarchy.agent" && $2 == "-e" ]] || exit 91
+shift 2
+printf 'terminal\n' >"$OMARCHY_TEST_TERMINAL_LOG"
+exec "$@"
+SH
+chmod +x "$mock_bin/setsid" "$mock_bin/uwsm-app" "$mock_bin/xdg-terminal-exec"
+
+rm "$env_log"
+HOME="$test_home" PATH="$mock_bin:$ROOT/bin:$PATH" \
+  OMARCHY_TEST_ENV_LOG="$env_log" OMARCHY_TEST_TERMINAL_LOG="$test_tmp/terminal.log" \
+  bash -c 'cd "$1" && omarchy-agent' bash "$test_home/Work/project"
+
+grep -Fx 'terminal' "$test_tmp/terminal.log" || fail "terminal boundary was not reached"
+grep -Fx 'agent:claude' "$env_log" || fail "terminal agent does not see OMARCHY_AGENT"
+grep -Fx "cwd:$test_home/Work/project" "$env_log" || fail "terminal agent does not see OMARCHY_AGENT_CWD"
+pass "terminal launch passes agent context through omarchy-launch-tui"
