@@ -373,6 +373,44 @@ refusal=$(HOME="$mute_home" PATH="$failing_bin:$ROOT/bin:$PATH" \
   fail "a mute that could not be written still reports success, so the user believes a program is silenced when it is not"
 pass "a mute that could not be written is not reported as one"
 
+# A diagnosis session stamps a per-program marker so a reproduction during the
+# investigation does not open another toast (and another agent).
+runtime="$TMPDIR/runtime"
+mkdir -p "$runtime"
+cat >"$watch_bin/omarchy-agent" <<'SH'
+#!/bin/bash
+exit 0
+SH
+cat >"$watch_bin/coredumpctl" <<'SH'
+#!/bin/bash
+exit 0
+SH
+chmod +x "$watch_bin/omarchy-agent" "$watch_bin/coredumpctl"
+PATH="$watch_bin:$ROOT/bin:$PATH" HOME="$watch_home" XDG_RUNTIME_DIR="$runtime" \
+  "$ROOT/bin/omarchy-agent-crash" 4242 brave /usr/bin/brave SIGTRAP
+[[ -f $runtime/omarchy/crash-diagnosis/brave ]] ||
+  fail "starting a crash diagnosis does not stamp the program under investigation"
+pass "starting a crash diagnosis stamps the program under investigation"
+
+reset_entries
+crash_entry brave /usr/bin/brave
+: >"$NOTIFY_LOG"
+PATH="$watch_bin:$ROOT/bin:$PATH" \
+  JOURNAL_ENTRIES="$JOURNAL_ENTRIES" \
+  NOTIFY_LOG="$NOTIFY_LOG" \
+  HOME="$watch_home" \
+  XDG_RUNTIME_DIR="$runtime" \
+  "$ROOT/bin/omarchy-crash-watch"
+! announced brave ||
+  fail "a crash reproduction during diagnosis still announces itself"
+pass "a crash reproduction during diagnosis stays quiet"
+
+# The toast must say how to dismiss without launching the agent: left-click
+# diagnoses, right-click / X dismisses (see NotificationCard).
+grep -Fq 'right-click or ✕ to dismiss' "$ROOT/bin/omarchy-crash-watch" ||
+  fail "the crash toast no longer says how to dismiss without diagnosing"
+pass "the crash toast says how to dismiss without diagnosing"
+
 skill="$ROOT/default/agents/skills/diagnose-crash/SKILL.md"
 grep -Fq 'omarchy-crash-mute' "$skill" ||
   fail "the diagnosis no longer names the command that mutes, so the offer it makes cannot be carried out"
