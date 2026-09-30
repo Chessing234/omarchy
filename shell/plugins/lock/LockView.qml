@@ -22,8 +22,6 @@ Item {
   property bool powerSaverActive: false
   property string passwordText: ""
   property bool syncingPasswordText: false
-  // Service bumps this; each surface LockView focuses its own field.
-  property int passwordFocusRequest: 0
 
   readonly property string placeholderText: "Enter Password"
   readonly property int fieldWidth: 381
@@ -70,9 +68,6 @@ Item {
   }
 
   onPasswordTextChanged: syncPasswordText()
-  onPasswordFocusRequestChanged: {
-    if (inputEnabled) Qt.callLater(forcePasswordFocus)
-  }
   onInputEnabledChanged: {
     if (inputEnabled) Qt.callLater(forcePasswordFocus)
   }
@@ -88,7 +83,7 @@ Item {
     font.family: Style.font.family
     font.pixelSize: root.passwordDotFontSize
     font.letterSpacing: root.passwordDotLetterSpacing
-    text: "*".repeat(passwordInput.text.length)
+    text: "●".repeat(passwordInput.text.length)
   }
 
   Rectangle {
@@ -162,15 +157,11 @@ Item {
         verticalAlignment: TextInput.AlignVCenter
         horizontalAlignment: TextInput.AlignHCenter
         activeFocusOnPress: true
-        focus: true
         clip: true
         enabled: root.inputEnabled && !root.authenticatingPassword
         readOnly: root.authenticatingPassword
         echoMode: TextInput.Password
-        // ASCII asterisk is in every monospace font. U+25CF (●) is not, and
-        // Qt falls back to showing the real password when the mask glyph is
-        // missing from Style.font.family (#12727).
-        passwordCharacter: "*"
+        passwordCharacter: "\u25CF"
         passwordMaskDelay: 0
         color: Color.lock.text
         selectionColor: Color.lock.selection

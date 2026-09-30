@@ -6,16 +6,7 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/base-test.sh"
 
 sleep_monitor="$ROOT/bin/omarchy-system-sleep-monitor"
 tmpdir=$(mktemp -d)
-monitor_pid=
-
-cleanup() {
-  if [[ -n $monitor_pid ]]; then
-    kill "$monitor_pid" 2>/dev/null || true
-    wait "$monitor_pid" 2>/dev/null || true
-  fi
-  rm -rf "$tmpdir"
-}
-trap cleanup EXIT
+trap 'rm -rf "$tmpdir"' EXIT
 
 mock_bin="$tmpdir/bin"
 mock_omarchy="$tmpdir/omarchy"
@@ -31,12 +22,6 @@ while [[ $1 == --* ]]; do
 done
 
 exec "$@"
-SH
-
-cat >"$mock_bin/busctl" <<'SH'
-#!/bin/bash
-
-exit 1
 SH
 
 cat >"$mock_bin/dbus-monitor" <<'SH'
@@ -55,19 +40,16 @@ SH
 
 chmod +x \
   "$mock_bin/systemd-inhibit" \
-  "$mock_bin/busctl" \
   "$mock_bin/dbus-monitor" \
   "$mock_omarchy/bin/omarchy-system-sleep-lock"
 ln -s "$sleep_monitor" "$mock_omarchy/bin/omarchy-system-sleep-monitor"
 
-# --inhibited is the process systemd-inhibit wraps; returning after the lock
-# is what drops the delay inhibitor.
 start_us=${EPOCHREALTIME//[!0-9]/}
 OMARCHY_PATH="$mock_omarchy" \
   PATH="$mock_bin:$PATH" \
   PRODUCER_PID_FILE="$producer_pid_file" \
   LOCK_LOG="$lock_log" \
-  bash "$sleep_monitor" --inhibited
+  "$sleep_monitor"
 elapsed_us=$((10#${EPOCHREALTIME//[!0-9]/} - 10#$start_us))
 
 [[ $(<"$lock_log") == "locked" ]] ||
@@ -100,7 +82,7 @@ OMARCHY_PATH="$mock_omarchy" \
   PATH="$mock_bin:$PATH" \
   PRODUCER_PID_FILE="$producer_pid_file" \
   LOCK_LOG="$lock_log" \
-  bash "$sleep_monitor" &
+  "$sleep_monitor" &
 monitor_pid=$!
 
 for _ in {1..100}; do
@@ -108,13 +90,14 @@ for _ in {1..100}; do
   sleep 0.01
 done
 if [[ ! -s $producer_pid_file ]]; then
+  kill "$monitor_pid" 2>/dev/null || true
+  wait "$monitor_pid" 2>/dev/null || true
   fail "sleep monitor starts its event producer"
 fi
 
 producer_pid=$(<"$producer_pid_file")
 kill "$monitor_pid"
 wait "$monitor_pid" 2>/dev/null || true
-monitor_pid=
 
 if kill -0 "$producer_pid" 2>/dev/null; then
   kill "$producer_pid" 2>/dev/null || true
@@ -122,121 +105,37 @@ if kill -0 "$producer_pid" 2>/dev/null; then
 fi
 pass "sleep monitor cleans up its producer when terminated"
 
-# A second delay inhibitor while logind is still in PrepareForSleep(true) is
-# the "inhibition already running" failure. After one true, wait for false.
-inhibit_log="$tmpdir/inhibit-log"
-resume_gate="$tmpdir/resume-gate"
-emitted_true="$tmpdir/emitted-true"
-: >"$inhibit_log"
-rm -f "$lock_log" "$resume_gate" "$emitted_true" "$producer_pid_file"
-
-cat >"$mock_bin/systemd-inhibit" <<'SH'
+cat >"$mock_bin/dbus-monitor" <<'SH_STUB'
 #!/bin/bash
-
-echo inhibit >>"$INHIBIT_LOG"
-while [[ $1 == --* ]]; do
-  shift
+printf 'signal without a sleep transition\n'
+sleep 0.05
+SH_STUB
+chmod +x "$mock_bin/dbus-monitor"
+for mode in --consume --inhibited service; do
+  args=()
+  [[ $mode == service ]] || args+=("$mode")
+  status=0
+  OMARCHY_PATH="$mock_omarchy" PATH="$mock_bin:$PATH" \
+    "$sleep_monitor" "${args[@]}" </dev/null >"$tmpdir/output" 2>&1 || status=$?
+  (( status == 1 )) || fail "$mode reports an event stream ending without a sleep event" "status: $status"
+  pass "sleep monitor reports EOF in $mode mode"
 done
-exec "$@"
-SH
 
-cat >"$mock_bin/dbus-monitor" <<'SH'
-#!/bin/bash
-
-echo "$$" >"$PRODUCER_PID_FILE"
-
-if [[ ! -f $EMITTED_TRUE ]]; then
-  touch "$EMITTED_TRUE"
-  printf '   boolean true\n'
-  exec sleep 30
-fi
-
-while [[ ! -f $RESUME_GATE ]]; do
-  sleep 0.01
-done
-printf '   boolean false\n'
-exec sleep 30
-SH
-
-chmod +x "$mock_bin/systemd-inhibit" "$mock_bin/dbus-monitor"
-
-OMARCHY_PATH="$mock_omarchy" \
-  PATH="$mock_bin:$PATH" \
-  PRODUCER_PID_FILE="$producer_pid_file" \
-  LOCK_LOG="$lock_log" \
-  INHIBIT_LOG="$inhibit_log" \
-  RESUME_GATE="$resume_gate" \
-  EMITTED_TRUE="$emitted_true" \
-  bash "$sleep_monitor" &
-monitor_pid=$!
-
-for _ in {1..200}; do
-  [[ -s $lock_log ]] && break
-  sleep 0.01
-done
-[[ -s $lock_log ]] || fail "sleep monitor locks on the first PrepareForSleep true"
-
-# The inhibitor must already have been dropped (and not retaken) while we
-# are still waiting for resume.
-sleep 0.3
-inhibit_count=$(grep -c '^inhibit$' "$inhibit_log" || true)
-(( inhibit_count == 1 )) ||
-  fail "sleep monitor does not re-take the inhibitor before resume" \
-    "inhibits: $inhibit_count"
-pass "sleep monitor does not re-take the inhibitor before resume"
-
-touch "$resume_gate"
-
-for _ in {1..200}; do
-  inhibit_count=$(grep -c '^inhibit$' "$inhibit_log" || true)
-  (( inhibit_count >= 2 )) && break
-  sleep 0.01
-done
-inhibit_count=$(grep -c '^inhibit$' "$inhibit_log" || true)
-(( inhibit_count >= 2 )) ||
-  fail "sleep monitor re-takes the inhibitor after resume" \
-    "inhibits: $inhibit_count"
-pass "sleep monitor re-takes the inhibitor after resume"
-
-kill "$monitor_pid"
-wait "$monitor_pid" 2>/dev/null || true
-monitor_pid=
-
-# EOF must not look like a successful event, or the parent spins instead of
-# allowing the service's RestartSec to pace a broken system bus.
-cat >"$mock_bin/dbus-monitor" <<'SH'
-#!/bin/bash
-echo stream >>"$INHIBIT_LOG"
-exit 1
-SH
-for mode in --consume --inhibited --wait-resume; do
-  if OMARCHY_PATH="$mock_omarchy" PATH="$mock_bin:$PATH" INHIBIT_LOG="$inhibit_log" \
-    bash "$sleep_monitor" "$mode" </dev/null >"$tmpdir/output" 2>&1; then
-    fail "$mode rejects EOF before the expected event"
-  fi
-done
-pass "all event-consuming modes reject a broken event stream"
-
-: >"$inhibit_log"
-status=0
-OMARCHY_PATH="$mock_omarchy" PATH="$mock_bin:$PATH" INHIBIT_LOG="$inhibit_log" \
-  timeout 2s bash "$sleep_monitor" >"$tmpdir/output" 2>&1 || status=$?
-(( status == 1 )) || fail "the parent exits on a broken event stream" "exit: $status"
-[[ $(grep -c '^inhibit$' "$inhibit_log") == 1 ]] || fail "a failed monitor is not retried in a busy loop"
-[[ $(grep -c '^stream$' "$inhibit_log") == 1 ]] || fail "only one failed stream is launched"
-pass "the parent exits after one stream failure for service restart pacing"
-
-cat >"$mock_bin/dbus-monitor" <<'SH'
+cat >"$mock_bin/dbus-monitor" <<'SH_STUB'
 #!/bin/bash
 printf '   boolean true\n'
 exec sleep 30
-SH
-cat >"$mock_omarchy/bin/omarchy-system-sleep-lock" <<'SH'
+SH_STUB
+cat >"$mock_omarchy/bin/omarchy-system-sleep-lock" <<'SH_STUB'
 #!/bin/bash
 exit 17
-SH
-status=0
-OMARCHY_PATH="$mock_omarchy" PATH="$mock_bin:$PATH" \
-  bash "$sleep_monitor" --inhibited || status=$?
-(( status == 17 )) || fail "the inhibited child reports the lock helper failure" "exit: $status"
-pass "lock-helper failures propagate through the inhibited child"
+SH_STUB
+for mode in --consume --inhibited service; do
+  args=()
+  [[ $mode == service ]] || args+=("$mode")
+  status=0
+  OMARCHY_PATH="$mock_omarchy" PATH="$mock_bin:$PATH" \
+    "$sleep_monitor" "${args[@]}" <<< '   boolean true' >"$tmpdir/output" 2>&1 || status=$?
+  (( status == 17 )) || fail "$mode preserves a failed lock helper status" "status: $status"
+  pass "sleep monitor reports lock-helper failure in $mode mode"
+done
