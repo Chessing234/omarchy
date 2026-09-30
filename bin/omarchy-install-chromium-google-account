@@ -46,15 +46,24 @@ echo "Installing Chromium Google account support..."
 
 # Chromium keeps the last occurrence of a repeated switch. Drop any prior
 # OAuth pair before appending so credential rotation or revert takes effect.
-tmp=$(mktemp)
-grep -Ev -- '^--oauth2-client-(id|secret)=' "$CONF" >"$tmp" || true
-mv "$tmp" "$CONF"
-
-echo "--oauth2-client-id=$OAUTH2_CLIENT_ID" >>"$CONF"
-echo "--oauth2-client-secret=$OAUTH2_CLIENT_SECRET" >>"$CONF"
+# Preserve dotfile symlinks and prepare the complete replacement beside its
+# target. A failed read or write must leave the previous flags untouched.
+if [[ -L $CONF ]]; then
+  CONF=$(readlink -f "$CONF")
+fi
+tmp=$(mktemp "$CONF.tmp.XXXXXX")
+trap 'rm -f -- "$tmp"' EXIT
+filter_status=0
+grep -Ev -- '^--oauth2-client-(id|secret)=' "$CONF" >"$tmp" || filter_status=$?
+# grep returns 1 when every old line was an OAuth flag (or the file is empty).
+if (( filter_status > 1 )); then
+  exit "$filter_status"
+fi
+printf '%s\n' "--oauth2-client-id=$OAUTH2_CLIENT_ID" "--oauth2-client-secret=$OAUTH2_CLIENT_SECRET" >>"$tmp"
 
 # Flags file can hold a client secret; prefer owner-readable only. The packaged
 # default credentials remain world-readable under default/chromium/.
-chmod 600 "$CONF" 2>/dev/null || true
+chmod 600 "$tmp"
+mv -- "$tmp" "$CONF"
 
 echo "Now you can login to your Google Account in Chromium."

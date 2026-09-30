@@ -47,7 +47,12 @@ if [[ $1 == "-Q" && $2 == "chromium" ]]; then
   exit 0
 fi
 if [[ $1 == "-Si" && $2 == "chromium" ]]; then
-  echo "Version         : 151.0.0.0-1"
+  if [[ ${TEST_NO_PACKAGE:-0} == 1 ]]; then exit 1; fi
+  if [[ ${LC_ALL:-} == C ]]; then
+    echo "Version         : 151.0.0.0-1"
+  else
+    echo "Versión         : 151.0.0.0-1"
+  fi
   exit 0
 fi
 echo "unexpected pacman: $*" >&2
@@ -82,3 +87,9 @@ PATH="$tmp/bin:/usr/bin:/bin" bash "$helper" >"$tmp/out" 2>&1 || status=$?
 (( status == 1 )) || fail "helper exits 1 when repos lack a floor build" "status=$status out=$(cat "$tmp/out")"
 grep -q 'Will retry' "$tmp/out" || fail "helper warns that it will retry" "$(cat "$tmp/out")"
 pass "helper leaves the floor unmet when repos only offer an older chromium"
+
+status=0
+TEST_NO_PACKAGE=1 PATH="$tmp/bin:/usr/bin:/bin" bash "$helper" >"$tmp/out" 2>&1 || status=$?
+(( status == 1 )) || fail "missing package keeps the migration pending"
+grep -q 'no chromium package is available' "$tmp/out" || fail "missing package reports an actionable error" "$(cat "$tmp/out")"
+pass "missing package reports the expected error"

@@ -36,7 +36,7 @@ pass "OAuth credentials live in overrideable env files, not the installer"
 
 mkdir -p "$tmpdir/config" "$tmpdir/share/omarchy/default/chromium"
 cp "$packaged_env" "$tmpdir/share/omarchy/default/chromium/google-oauth.env"
-: >"$tmpdir/config/chromium-flags.conf"
+printf '%s\n' '--ozone-platform=wayland' >"$tmpdir/config/chromium-flags.conf"
 
 HOME="$tmpdir" XDG_CONFIG_HOME="$tmpdir/config" OMARCHY_PATH="$tmpdir/share/omarchy" \
   "$installer"
@@ -54,7 +54,7 @@ cat >"$tmpdir/config/omarchy/chromium-google-oauth.env" <<'EOF'
 OAUTH2_CLIENT_ID=override-id.apps.googleusercontent.com
 OAUTH2_CLIENT_SECRET=override-secret
 EOF
-: >"$tmpdir/config/chromium-flags.conf"
+printf '%s\n' '--ozone-platform=wayland' >"$tmpdir/config/chromium-flags.conf"
 
 HOME="$tmpdir" XDG_CONFIG_HOME="$tmpdir/config" OMARCHY_PATH="$tmpdir/share/omarchy" \
   "$installer"
@@ -84,3 +84,29 @@ if grep -Fq -- '--oauth2-client-secret=override-secret' \
   fail "re-run left the previous override secret in chromium-flags.conf"
 fi
 pass "re-run replaces prior OAuth flag lines when credentials change"
+
+grep -Fxq -- '--ozone-platform=wayland' "$tmpdir/config/chromium-flags.conf" || fail "credential rotation preserves unrelated flags"
+pass "credential rotation preserves unrelated flags"
+
+mv "$tmpdir/config/chromium-flags.conf" "$tmpdir/managed-flags.conf"
+ln -s ../managed-flags.conf "$tmpdir/config/chromium-flags.conf"
+XDG_CONFIG_HOME="$tmpdir/config" OMARCHY_PATH="$tmpdir/share/omarchy" "$installer" >/dev/null
+[[ -L $tmpdir/config/chromium-flags.conf ]] || fail "installer preserves the dotfile symlink"
+grep -Fxq -- '--ozone-platform=wayland' "$tmpdir/managed-flags.conf" || fail "symlink target retains unrelated flags"
+pass "installer updates the symlink target without replacing the link"
+
+# Model a read failure even on a host where this test runs with elevated access.
+mkdir -p "$tmpdir/bin"
+cat >"$tmpdir/bin/grep" <<'SH'
+#!/bin/bash
+exit 2
+SH
+chmod +x "$tmpdir/bin/grep"
+cp "$tmpdir/managed-flags.conf" "$tmpdir/original"
+if PATH="$tmpdir/bin:$PATH" XDG_CONFIG_HOME="$tmpdir/config" OMARCHY_PATH="$tmpdir/share/omarchy" "$installer" >/dev/null 2>&1; then
+  fail "installer must report a flags read failure"
+fi
+cmp -s "$tmpdir/original" "$tmpdir/managed-flags.conf" || fail "failed read preserves the old flags"
+[[ -L $tmpdir/config/chromium-flags.conf ]] || fail "failed read preserves the link"
+[[ -z $(find "$tmpdir" -name '*.tmp.*' -print -quit) ]] || fail "failed rewrite removes its temporary file"
+pass "failed flags read leaves the original configuration intact"

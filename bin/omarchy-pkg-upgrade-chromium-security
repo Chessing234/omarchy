@@ -24,7 +24,7 @@ if [[ $(vercmp "$current" "$CHROMIUM_MIN_VERSION") -ge 0 ]]; then
   exit 0
 fi
 
-available=$(pacman -Si chromium 2>/dev/null | awk -F': ' '/^Version / { print $2; exit }')
+available=$(LC_ALL=C pacman -Si chromium 2>/dev/null | awk -F': ' '/^Version / { print $2; exit }' || true)
 if [[ -z $available ]]; then
   echo "Chromium $current is older than the security floor $CHROMIUM_MIN_VERSION, and no chromium package is available in the configured repos." >&2
   exit 1
