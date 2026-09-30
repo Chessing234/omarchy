@@ -12,7 +12,7 @@ printf '%s\0' "$@" > "$CAPTURE"
 exit "${AGENT_STATUS:-0}"
 MOCK
 chmod +x "$tmp/bin/omarchy-agent"
-run() { bash "$ROOT/bin/omarchy-agent-explain" "$@"; }
+run() { bash "$ROOT/bin/omarchy-agent-diagnose-log" "$@"; }
 printf '%s\n' 'error: $(touch marker)' 'second line' > "$tmp/build output.log"
 run --inline "$tmp/build output.log" 'make test' 'failed with 2'
 python3 - <<'PY'

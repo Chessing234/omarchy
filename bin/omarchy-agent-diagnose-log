@@ -2,7 +2,7 @@
 
 # omarchy:summary=Explain a captured command failure with the default agent
 # omarchy:args=[--inline] <log-file> [context...]
-# omarchy:examples=omarchy agent explain build.log "make test failed" | omarchy agent explain --inline update.log
+# omarchy:examples=omarchy agent diagnose-log build.log "make test failed" | omarchy agent diagnose-log --inline update.log
 
 set -euo pipefail
 inline=()
@@ -11,7 +11,7 @@ if [[ ${1:-} == "--inline" ]]; then
   shift
 fi
 if (($# == 0)); then
-  echo "Usage: omarchy agent explain [--inline] <log-file> [context...]" >&2
+  echo "Usage: omarchy agent diagnose-log [--inline] <log-file> [context...]" >&2
   exit 1
 fi
 file=$1
