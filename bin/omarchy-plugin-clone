@@ -129,8 +129,10 @@ source_info=$(omarchy-plugin-catalog | jq -r --arg id "$source_id" '
 IFS=$'\t' read -r source_dir source_manifest source_name <<<"$source_info"
 
 user_part="${USER:-$(id -un)}"
-# Match the plugin remove command's ID rules before creating any files.
-[[ $user_part =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && $user_part != *..* ]] || fail "invalid username for plugin id: $user_part"
+# Keep supported account names, including a leading underscore or final dollar.
+# The same characters are accepted by plugin removal after adding the suffix.
+user_pattern='^[A-Za-z0-9_][A-Za-z0-9._-]*[$]?$'
+[[ $user_part =~ $user_pattern && $user_part != *..* ]] || fail "invalid username for plugin id: $user_part"
 new_id="${user_part}.${source_id#omarchy.}"
 display_name="My $source_name"
 target_dir="$PLUGINS_DIR/$new_id"

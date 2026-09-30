@@ -28,7 +28,7 @@ done
 chmod +x "$case_root/bin/"*
 
 case_index=0
-for username in tester Tester user_1 a-b.c; do
+for username in tester Tester user_1 a-b.c _service 'tester$'; do
   case_index=$((case_index + 1))
   home="$case_root/valid-$case_index"
   : >"$TEST_CALLS"
@@ -37,12 +37,16 @@ for username in tester Tester user_1 a-b.c; do
   [[ -f $target/Widget.qml ]] || fail "valid username clones inside the plugin directory"
   jq -e --arg id "$username.fixture" '.id == $id and .omarchy.clonedFrom == "omarchy.fixture"' "$target/manifest.json" >/dev/null || fail "valid username is retained in the manifest"
   grep -Fxq "omarchy-plugin-enable $username.fixture" "$TEST_CALLS" || fail "valid clone is enabled"
-  pass "username $username clones and enables its plugin"
+  HOME="$home" PATH="$case_root/bin:$PATH" bash "$ROOT/bin/omarchy-plugin-remove" "$username.fixture" --yes >"$case_root/remove-output"
+  [[ ! -e $target ]] || fail "valid username plugin can be removed"
+  backups=("$home/.config/omarchy/plugins/.$username.fixture.bak."*)
+  [[ -f ${backups[0]}/manifest.json ]] || fail "removal preserves the clone in its backup"
+  pass "username $username clones, enables and removes its plugin"
 done
 
 # Even the negative-control version of this test keeps every candidate path
 # inside its synthetic home. No host config or pre-existing plugin is touched.
-for username in '../escaped' '../../escaped' 'nested/name' 'a..b' _service 'tester$' $'bad\nname'; do
+for username in '../escaped' '../../escaped' 'nested/name' 'a..b' 'bad$name' $'bad\nname'; do
   home="$case_root/invalid"
   mkdir -p "$home"
   : >"$TEST_CALLS"
