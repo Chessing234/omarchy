@@ -35,6 +35,6 @@ if [[ -s $config_file ]]; then
       end;
 
     .bar.layout.center |= place_indicators_before_clock
-  ' "$config_file" >"$tmp" && cat "$tmp" >"$config_file" || { rm -f "$tmp"; exit 1; }
+  ' "$config_file" >"$tmp" && omarchy-config-replace "$tmp" "$config_file" || { rm -f "$tmp"; exit 1; }
   rm -f "$tmp"
 fi

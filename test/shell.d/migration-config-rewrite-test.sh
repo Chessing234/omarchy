@@ -7,10 +7,8 @@ require_command jq
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 
-# A migration that edits a config's contents must leave the file itself alone.
-# Replacing it with the temp file it staged the new contents in hands the
-# config that file's identity: mktemp's 0600, and a regular file where a
-# dotfile manager had put a symlink.
+# Migrations retain the original config's mode and any dotfile symlink while
+# atomically replacing the resolved target with completely staged content.
 
 hyprland_migration=$(grep -rl 'Update Hyprland Lua entrypoint to load Omarchy bootstrap' "$ROOT/migrations" | head -n 1)
 [[ -n $hyprland_migration ]] || fail "Hyprland bootstrap migration exists"

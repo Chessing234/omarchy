@@ -71,7 +71,7 @@ ensure_kitty_binding() {
         }
         print
       }
-    ' "$config" >"$tmp" && cat "$tmp" >"$config" || { rm -f "$tmp"; return 1; }
+    ' "$config" >"$tmp" && omarchy-config-replace "$tmp" "$config" || { rm -f "$tmp"; return 1; }
     rm -f "$tmp"
   elif ! grep -Eq "^map[[:space:]]+$key_regex[[:space:]]" "$config"; then
     if grep -qxF 'map shift+insert paste_from_clipboard' "$config"; then
@@ -88,7 +88,7 @@ ensure_kitty_binding() {
           print "map " key " " binding
           inserted = 1
         }
-      ' "$config" >"$tmp" && cat "$tmp" >"$config" || { rm -f "$tmp"; return 1; }
+      ' "$config" >"$tmp" && omarchy-config-replace "$tmp" "$config" || { rm -f "$tmp"; return 1; }
       rm -f "$tmp"
     else
       printf '\n%s\nmap %s %s\n' "$comment" "$key" "$binding" >>"$config"
@@ -114,7 +114,7 @@ ensure_foot_text_binding() {
       }
       index($0, sequence "=") == 1 { $0 = sequence "=" binding }
       { print }
-    ' "$config" >"$tmp" && cat "$tmp" >"$config" || { rm -f "$tmp"; return 1; }
+    ' "$config" >"$tmp" && omarchy-config-replace "$tmp" "$config" || { rm -f "$tmp"; return 1; }
     rm -f "$tmp"
   elif grep -qxF '[text-bindings]' "$config"; then
     tmp=$(mktemp)
@@ -130,7 +130,7 @@ ensure_foot_text_binding() {
         print sequence "=" binding
         inserted = 1
       }
-    ' "$config" >"$tmp" && cat "$tmp" >"$config" || { rm -f "$tmp"; return 1; }
+    ' "$config" >"$tmp" && omarchy-config-replace "$tmp" "$config" || { rm -f "$tmp"; return 1; }
     rm -f "$tmp"
   else
     printf '\n[text-bindings]\n%s\n%s=%s\n' "$comment" "$sequence" "$binding" >>"$config"
