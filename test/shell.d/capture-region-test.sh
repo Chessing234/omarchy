@@ -20,7 +20,11 @@ monitors)
   printf '%s\n' '[{"name":"DP-1","focused":true,"x":0,"y":0,"width":2560,"height":1440,"scale":1,"transform":0,"activeWorkspace":{"id":1}}]'
   ;;
 clients)
-  printf '%s\n' '[{"workspace":{"id":1},"at":[0,0],"size":[1280,1440]},{"workspace":{"id":1},"at":[400,500],"size":[400,300]}]'
+  if [[ ${OMARCHY_TEST_EQUAL_WINDOWS:-0} == 1 ]]; then
+    printf '%s\n' '[{"workspace":{"id":1},"hidden":false,"visible":true,"at":[400,500],"size":[400,300]},{"workspace":{"id":1},"hidden":false,"visible":true,"at":[500,550],"size":[400,300]}]'
+  else
+    printf '%s\n' '[{"workspace":{"id":1},"hidden":false,"visible":true,"at":[0,0],"size":[1280,1440]},{"workspace":{"id":1},"hidden":false,"visible":true,"at":[400,500],"size":[400,300]}]'
+  fi
   ;;
 cursorpos)
   printf '%s\n' "${OMARCHY_TEST_CURSOR:-500, 600}"
@@ -68,3 +72,9 @@ named=$(OMARCHY_TEST_SLURP="2000,200 1x1" "$ROOT/bin/omarchy-capture-region" sma
 [[ $named == "monitor:DP-1" ]] ||
   fail "a monitor-sized pick is reported by name" "actual: $named"
 pass "a monitor-sized pick is reported by name"
+
+# slurp highlights the last candidate when overlapping rectangles have equal area.
+equal=$(OMARCHY_TEST_EQUAL_WINDOWS=1 OMARCHY_TEST_SLURP="600,600 1x1" "$ROOT/bin/omarchy-capture-region" smart)
+[[ $equal == "500,550 400x300" ]] ||
+  fail "a bare click follows slurp's last-on-tie highlight" "actual: $equal"
+pass "equal-area overlapping windows use the last candidate"

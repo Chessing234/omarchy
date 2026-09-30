@@ -49,3 +49,20 @@ run_fix >/dev/null
 grep -F 'no_hardware_cursors = true' "$looknfeel" >/dev/null ||
   fail "a comment mentioning the setting still gets a real assignment"
 pass "vmware cursor setup ignores a comment mentioning the setting"
+
+for setting in 'hl.config({ cursor = { no_hardware_cursors = false } })' '  no_hardware_cursors = false,'; do
+  printf '%s\n' "$setting" >"$looknfeel"
+  run_fix >/dev/null
+  [[ $(cat "$looknfeel") == "$setting" ]] || fail "an explicit cursor setting is preserved"
+done
+pass "one-line and multi-line explicit cursor settings are preserved"
+
+# Existing installations reach the same idempotent repair through migrations.
+printf '%s\n' '-- User look and feel' >"$looknfeel"
+for attempt in 1 2; do
+  HOME="$test_tmp/home" OMARCHY_PATH="$ROOT" PATH="$test_tmp/bin:$ROOT/bin:$PATH" \
+    bash -euo pipefail "$ROOT/migrations/1790350466.sh" >/dev/null
+done
+(( $(grep -c 'no_hardware_cursors = true' "$looknfeel") == 1 )) ||
+  fail "migration enables software cursors exactly once"
+pass "migration repairs existing VMware configurations idempotently"

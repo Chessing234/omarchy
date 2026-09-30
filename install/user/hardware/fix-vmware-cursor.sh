@@ -9,7 +9,11 @@ if omarchy-cmd-present lspci &&
 
   # A comment mentioning the setting is not an assignment — vmwgfx guests
   # still have an invisible pointer until a real no_hardware_cursors = line exists.
-  if [[ -f $looknfeel ]] && ! grep -Eq '^[[:space:]]*no_hardware_cursors[[:space:]]*=' "$looknfeel"; then
+  if [[ -f $looknfeel ]] && ! awk '
+    { sub(/--.*/, "") }
+    /(^|[^[:alnum:]_])no_hardware_cursors[[:space:]]*=/ { found = 1 }
+    END { exit !found }
+  ' "$looknfeel"; then
     echo "Detected vmwgfx driver. Forcing software cursors so the mouse pointer stays visible."
 
     cat >>"$looknfeel" <<'EOF'
