@@ -41,6 +41,25 @@ install_tui 'Quoted TUI' 'echo hi; id' float someicon
 quoted_file="$applications/Quoted TUI.desktop"
 exec_line=$(desktop_value "$quoted_file" Exec)
 
-[[ $exec_line == *'"echo hi; id"'* ]] ||
-  fail "Exec quotes the launch command as one argument" "$exec_line"
-pass "Exec quotes the launch command as one argument"
+[[ $exec_line == *'"echo" "hi;" "id"'* ]] ||
+  fail "Exec quotes each command argument separately" "$exec_line"
+pass "Exec quotes each command argument separately"
+
+require_command python3
+commands=("/bin/echo hello" '/bin/echo "hello world"' "printf '%s\\n' '\$HOME'" 'bash -c "printf first; echo second"')
+outputs=($'hello\n' $'hello world\n' $'$HOME\n' $'firstsecond\n')
+commands+=("/bin/echo '%f'" "/bin/echo '\$(touch $test_tmp/unexpected)'")
+outputs+=($'%f\n' "\$(touch $test_tmp/unexpected)"$'\n')
+for index in "${!commands[@]}"; do
+  install_tui "Parsed $index" "${commands[$index]}" float someicon
+  python3 "$ROOT/test/shell.d/tui-exec-check.py" "$applications/Parsed $index.desktop" "${commands[$index]}" "${outputs[$index]}" ||
+    fail "parsed desktop command executes with its intended arguments"
+done
+[[ ! -e $test_tmp/unexpected ]] || fail "quoted substitutions must not execute"
+pass "GLib-parsed launch commands preserve arguments, quoting and shell syntax"
+
+if install_tui 'Invalid command' 'echo "unterminated' float someicon 2>"$test_tmp/parse.err"; then
+  fail "unbalanced command quotes must be rejected"
+fi
+[[ ! -e $applications/'Invalid command.desktop' ]] || fail "invalid command must not publish a launcher"
+pass "malformed command quoting is rejected before publishing a launcher"

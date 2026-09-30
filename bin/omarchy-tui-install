@@ -69,12 +69,25 @@ desktop_string_escape() {
   printf '%s' "$value"
 }
 
-desktop_exec_arg() {
-  # One Exec argument, double-quoted per the freedesktop Exec spec.
-  local escaped
-  escaped=$(printf '%s' "$1" \
-    | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/`/\\`/g' -e 's/\$/\\$/g' -e 's/%/%%/g')
-  printf '"%s"' "$escaped"
+desktop_exec_command() {
+  # Parse shell-style quoting without executing substitutions or operators.
+  # Each resulting argument gets its own Desktop Entry quoting layer.
+  python3 - "$1" <<'PYTHON'
+import shlex
+import sys
+
+try:
+    arguments = shlex.split(sys.argv[1])
+except ValueError as error:
+    sys.exit(f"Invalid launch command: {error}")
+if not arguments:
+    sys.exit("Launch command must name an executable.")
+def quote(argument):
+    for character in ('\\', '"', '`', '$'):
+        argument = argument.replace(character, '\\' + character)
+    return '"' + argument.replace('%', '%%') + '"'
+print(' '.join(quote(argument) for argument in arguments), end='')
+PYTHON
 }
 
 if (( $# != 4 )); then
@@ -122,9 +135,10 @@ else
   APP_CLASS="TUI.tile"
 fi
 
-# Quote the user command as one Exec argument so metacharacters cannot reshape
-# the xdg-terminal-exec line, then escape the whole Exec value for file syntax.
-EXEC_COMMAND="xdg-terminal-exec --app-id=$APP_CLASS -e $(desktop_exec_arg "$APP_EXEC")"
+# Preserve executable/argument boundaries while protecting Desktop Entry syntax.
+# Shell syntax runs only when the user explicitly selects a shell (bash -c).
+command_arguments=$(desktop_exec_command "$APP_EXEC")
+EXEC_COMMAND="xdg-terminal-exec --app-id=$APP_CLASS -e $command_arguments"
 
 name_field=$(desktop_string_escape "$APP_NAME")
 exec_field=$(desktop_string_escape "$EXEC_COMMAND")

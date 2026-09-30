@@ -17,7 +17,8 @@ if [[ $1 == docker ]]; then
   shift
   exec docker "$@"
 fi
-exec "$@"
+echo "unexpected privileged command" >&2
+exit 99
 SH
 chmod +x "$stub_bin/sudo"
 
@@ -28,6 +29,7 @@ for arg in "$@"; do
   printf '\t%s' "$arg" >>"$OMARCHY_DOCKER_DBS_LOG"
 done
 printf '\n' >>"$OMARCHY_DOCKER_DBS_LOG"
+exit "${DOCKER_EXIT:-0}"
 SH
 chmod +x "$stub_bin/docker"
 
@@ -78,3 +80,35 @@ pass "MongoDB no longer uses hardcoded admin123"
 grep -E 'ALLOW_EMPTY|HOST_AUTH_METHOD=trust|admin123|@dmin123' "$ROOT/bin/omarchy-install-docker-dbs" &&
   fail "install-docker-dbs still contains empty/hardcoded credential flags" ||
   pass "install-docker-dbs source has no empty/hardcoded credential flags"
+
+# Failed repeat installs must retain the credential for the existing container.
+for database in 'MySQL:mysql' 'PostgreSQL:postgres' 'MariaDB:mariadb' 'Redis:redis' 'MongoDB:mongodb' 'MSSQL:mssql'; do
+  db=${database%%:*}
+  name=${database#*:}
+  creds="$XDG_CONFIG_HOME/omarchy/docker-dbs/$name.env"
+  printf 'previous-working-secret\n' >"$creds"
+  cp "$creds" "$test_tmp/expected"
+  if DOCKER_EXIT=42 bash "$ROOT/bin/omarchy-install-docker-dbs" "$db" >"$test_tmp/failure" 2>&1; then
+    fail "$db must report container creation failure"
+  fi
+  cmp -s "$creds" "$test_tmp/expected" || fail "$db failed repeat install preserves prior credentials"
+  candidate=$(find "${creds%/*}" -name ".$name.env.*" -type f | head -1)
+  [[ -n $candidate ]] || fail "$db retains private recovery credentials"
+  [[ $(stat -f '%Lp' "$candidate" 2>/dev/null || stat -c '%a' "$candidate") == *600 ]] || fail "$db recovery credentials are private"
+  grep -Fq "$candidate" "$test_tmp/failure" || fail "$db reports the recovery file"
+  pass "$db failed repeat install preserves working credentials"
+done
+
+cat >"$stub_bin/mv" <<'SH'
+#!/bin/bash
+exit 1
+SH
+chmod +x "$stub_bin/mv"
+creds="$XDG_CONFIG_HOME/omarchy/docker-dbs/postgres.env"
+cp "$creds" "$test_tmp/expected"
+if bash "$ROOT/bin/omarchy-install-docker-dbs" PostgreSQL >"$test_tmp/publish-failure" 2>&1; then
+  fail "credential publication failure must propagate"
+fi
+cmp -s "$creds" "$test_tmp/expected" || fail "failed credential publication preserves previous file"
+grep -q 'candidate credentials retained' "$test_tmp/publish-failure" || fail "failed publication reports recoverable credentials"
+pass "failed publication preserves old credentials and retains the new secret"
