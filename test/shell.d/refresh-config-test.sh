@@ -71,11 +71,24 @@ done
 
 pass "refresh-config refuses .. and absolute paths"
 
-# A newline would truncate the `..` scan while the destination still uses the
-# full string. Refuse control characters up front.
+# Plant the newline directory so the existence check cannot hide a missing
+# traversal guard (the old split-based scan stopped at this newline).
+mkdir -p "$omarchy_path/config/hypr"$'\n'
 if HOME="$home" OMARCHY_PATH="$omarchy_path" "$ROOT/bin/omarchy-refresh-config" $'hypr\n/../../README' \
   >"$tmpdir/out" 2>"$tmpdir/err"; then
   fail "refresh-config refuses a path containing a newline"
 fi
 [[ ! -e $home/README ]] || fail "newline path must not write $HOME/README"
 pass "refresh-config refuses paths containing a newline"
+
+# Exercise newline and carriage-return refusals independently of traversal.
+for bad in $'hypr/a\nb.lua' $'hypr/a\rb.lua'; do
+  printf 'shipped\n' >"$omarchy_path/config/$bad"
+  if HOME="$home" OMARCHY_PATH="$omarchy_path" "$ROOT/bin/omarchy-refresh-config" "$bad" >"$tmpdir/out" 2>"$tmpdir/err"; then
+    fail "refresh-config refuses a shipped filename containing a line break"
+  fi
+  grep -Fq "Not a shipped user config: $bad" "$tmpdir/err" ||
+    fail "refresh-config reports the line-break refusal"
+  [[ ! -e $home/.config/$bad ]] || fail "line-break path must not be copied"
+done
+pass "refresh-config refuses newline and carriage-return filenames without traversal"

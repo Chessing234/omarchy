@@ -19,8 +19,8 @@ fi
 
 # Joined onto both ~/.config and $OMARCHY_PATH/config. Absolute paths are not
 # shipped relative configs (e.g. /etc/hosts → ~/.config/etc/hosts). A `..`
-# component can land the write outside ~/.config. Newlines would truncate a
-# split-based scan while the destination still uses the full string.
+# component can land the write outside ~/.config. Newlines and carriage
+# returns are not accepted in shipped config paths.
 if [[ $config_file == /* || $config_file == *$'\n'* || $config_file == *$'\r'* || /$config_file/ == */../* ]]; then
   echo "Not a shipped user config: $config_file" >&2
   exit 1
