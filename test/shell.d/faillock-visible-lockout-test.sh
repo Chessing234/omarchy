@@ -10,13 +10,6 @@ migration="$ROOT/migrations/1790385000.sh"
 [[ -f $install_script ]] || fail "lockout install script is present"
 [[ -f $migration ]] || fail "lockout visibility migration is present"
 
-# The install script must write a preauth line that can report lockout.
-grep -Eq 'preauth deny=10 unlock_time=120' "$install_script" ||
-  fail "install script sets preauth deny/unlock_time without silent" "$(grep preauth "$install_script" || true)"
-! grep -Eq 'preauth[[:space:]]+silent' "$install_script" ||
-  fail "install script must not keep preauth silent" "$(grep preauth "$install_script" || true)"
-pass "install script drops silent from pam_faillock preauth"
-
 sudoers="$ROOT/etc/sudoers.d/omarchy-passwd-tries"
 [[ -f $sudoers ]] || fail "passwd_tries sudoers drop-in is present"
 grep -Eq '^Defaults[[:space:]]+!pam_silent[[:space:]]*$' "$sudoers" ||
@@ -36,6 +29,10 @@ auth      [default=die]               pam_faillock.so authfail deny=10 unlock_ti
 auth      sufficient                  pam_faillock.so authsucc
 EOF
 
+# Apply the actual install transform before migration, using the same synthetic
+# system-auth file and restricted sudo stub as the existing-install path.
+cp "$pam" "$tmpdir/original-pam"
+
 # Run the actual migration, relocating its sole PAM target into this fixture.
 # The sudo stub accepts only sed against that synthetic file; it never elevates.
 mkdir -p "$tmpdir/bin"
@@ -47,6 +44,24 @@ exec sed "$@"
 STUB
 chmod +x "$tmpdir/bin/sudo"
 export TEST_PAM="$pam"
+export TEST_AUTOLOGIN="$tmpdir/sddm-autologin" TEST_REAL_SED
+TEST_REAL_SED=$(command -v sed)
+printf 'auth required pam_permit.so\n' >"$TEST_AUTOLOGIN"
+cat >"$tmpdir/bin/sed" <<'STUB'
+#!/bin/bash
+[[ ${*: -1} == "$TEST_PAM" || ${*: -1} == "$TEST_AUTOLOGIN" ]] || exit 99
+exec "$TEST_REAL_SED" "$@"
+STUB
+chmod +x "$tmpdir/bin/sed"
+
+sed "s|/etc/pam.d/system-auth|$pam|g; s|/etc/pam.d/sddm-autologin|$TEST_AUTOLOGIN|g" "$install_script" >"$tmpdir/install.sh"
+PATH="$tmpdir/bin:$PATH" bash -euo pipefail "$tmpdir/install.sh"
+grep -Eq 'pam_faillock\.so preauth deny=10 unlock_time=120' "$pam" ||
+  fail "fresh install removes silent and sets lockout parameters" "$(cat "$pam")"
+! grep -Eq 'preauth[[:space:]]+silent' "$pam" || fail "fresh install leaves no silent preauth token"
+pass "actual install transform makes lockout messages visible"
+cp "$tmpdir/original-pam" "$pam"
+
 sed "s|/etc/pam.d/system-auth|$pam|g" "$migration" >"$tmpdir/migration.sh"
 PATH="$tmpdir/bin:$PATH" bash -euo pipefail "$tmpdir/migration.sh"
 
