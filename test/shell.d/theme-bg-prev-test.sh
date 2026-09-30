@@ -94,6 +94,15 @@ HOME="$home" PATH="$stub:$PATH" BG_SET_LOG="$tmpdir/set" \
   fail "theme-bg-prev resolves a relative current background link" "$(cat "$tmpdir/set")"
 pass "theme-bg-prev resolves a relative current background link"
 
+rm "$real_backgrounds/b.png"
+ln "$real_backgrounds/a.png" "$real_backgrounds/b.png"
+ln -sfn "$real_backgrounds/b.png" "$home/.local/state/omarchy/current/background"
+HOME="$home" PATH="$stub:$PATH" BG_SET_LOG="$tmpdir/set" \
+  "$BASH" "$ROOT/bin/omarchy-theme-bg-prev"
+[[ $(<"$tmpdir/set") == "$user_backgrounds/a.png" ]] ||
+  fail "hard-linked backgrounds remain separate entries in sort order"
+pass "theme-bg-prev distinguishes hard-linked background entries"
+
 # Videos are part of the cycle for bg-next; prev must use the same extensions.
 rm -rf "$home/.local/state/omarchy/current/theme/backgrounds" "$user_backgrounds"
 mkdir -p "$home/.local/state/omarchy/current/theme/backgrounds"
