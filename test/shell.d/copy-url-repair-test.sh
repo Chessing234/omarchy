@@ -9,7 +9,15 @@ require_command python3
 
 repair_cmd="$ROOT/bin/omarchy-cmd-repair-chromium-copy-url"
 test_dir=$(mktemp -d)
-trap 'rm -rf "$test_dir"' EXIT
+socket_pid=""
+cleanup() {
+  if [[ -n $socket_pid ]]; then
+    kill "$socket_pid" 2>/dev/null || true
+    wait "$socket_pid" 2>/dev/null || true
+  fi
+  rm -rf "$test_dir"
+}
+trap cleanup EXIT
 
 fixture_home="$test_dir/home"
 profile_root="$fixture_home/.config/chromium"
@@ -116,19 +124,38 @@ close_browser
 # A lock whose PID is not locally visible can still have a browser socket.
 write_stale_preferences
 stale_browser_lock
-python3 - "$profile_root/SingletonSocket" <<'PY_SOCKET'
+python3 - "$profile_root/SingletonSocket" "$test_dir/socket-ready" <<'PY_SOCKET' &
+from pathlib import Path
+import signal
 import socket
 import sys
 with socket.socket(socket.AF_UNIX) as sock:
     sock.bind(sys.argv[1])
+    sock.listen(5)
+    Path(sys.argv[2]).touch()
+    signal.pause()
 PY_SOCKET
+socket_pid=$!
+for attempt in {1..100}; do
+  [[ -f $test_dir/socket-ready ]] && break
+  sleep 0.01
+done
+[[ -f $test_dir/socket-ready ]] || fail "fixture socket starts listening"
 before_hash=$(sha256sum "$preferences" | cut -d' ' -f1)
 run_migration && fail "socket prevents repair when the lock PID is unavailable"
 [[ $(sha256sum "$preferences" | cut -d' ' -f1) == "$before_hash" ]] ||
   fail "socket-protected preferences remain untouched"
-rm -f "$profile_root/SingletonSocket"
-close_browser
 pass "browser socket protects a profile with an unavailable lock PID"
+
+kill "$socket_pid"
+wait "$socket_pid" 2>/dev/null || true
+socket_pid=""
+[[ -S $profile_root/SingletonSocket ]] || fail "fixture leaves an abandoned socket"
+run_migration || fail "abandoned socket does not block migration"
+assert_repaired || fail "repair proceeds after the socket listener exits"
+rm -f "$profile_root/SingletonSocket" "$preferences.omarchy-copy-url-repair.bak"
+close_browser
+pass "abandoned socket does not block repair"
 
 # An interrupted backup must not block all future migrations if its profile
 # was removed or became unreadable. Keep the backup for manual recovery.
