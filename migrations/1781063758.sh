@@ -35,8 +35,8 @@ if [[ -f $hyprland_config ]] && ! grep -Fq '/default/hypr/bootstrap.lua' "$hyprl
     }
 
     { print }
-  ' "$hyprland_config" >"$tmp"
+  ' "$hyprland_config" >"$tmp" || { rm -f "$tmp"; exit 1; }
 
-  cat "$tmp" >"$hyprland_config"
+  cat "$tmp" >"$hyprland_config" || { rm -f "$tmp"; exit 1; }
   rm -f "$tmp"
 fi

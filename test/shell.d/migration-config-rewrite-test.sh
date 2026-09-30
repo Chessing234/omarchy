@@ -104,9 +104,8 @@ pass "Hyprland migration writes through a dotfiles symlink"
   fail "clock migration writes through the symlink"
 pass "clock migration writes through a dotfiles symlink"
 
-# The two migrations above stand in for the rest: the whole directory has to
-# stay on the write-through pattern, or the next one reintroduces this.
+# Guard this exact staging pattern; other editing forms need separate tests.
 staged=$(grep -rn 'mv "\$tmp"' "$ROOT/migrations" || true)
 [[ -z $staged ]] ||
-  fail "no migration replaces a config with its staging file" "$staged"
-pass "no migration replaces a config with its staging file"
+  fail "no migration uses the literal staging rename pattern" "$staged"
+pass "no migration uses the literal staging rename pattern"

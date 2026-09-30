@@ -15,8 +15,8 @@ if [[ -d $nvim_config_dir ]]; then
     {
       printf '%s\n' 'require("config.remote_clipboard").setup()'
       cat "$nvim_options"
-    } >"$tmp"
-    cat "$tmp" >"$nvim_options"
+    } >"$tmp" || { rm -f "$tmp"; exit 1; }
+    cat "$tmp" >"$nvim_options" || { rm -f "$tmp"; exit 1; }
     rm -f "$tmp"
   fi
 fi
