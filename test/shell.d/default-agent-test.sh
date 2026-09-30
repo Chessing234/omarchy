@@ -23,8 +23,7 @@ mise_install_root="$test_tmp/mise-installs"
 muse_login_log="$test_tmp/muse-login"
 mkdir -p "$mock_bin" "$test_home" "$mise_install_root"
 
-# Real omarchy-mise-install resolves `$install_root/$command`, so each command
-# the installer is asked for needs an executable there.
+# The mise stub returns a complete executable path for each requested command.
 for name in grok omp crush ori gemini claude agy opencode pi copilot codex cursor-agent muse; do
   printf '#!/bin/bash\nexit 0\n' >"$mise_install_root/$name"
   chmod +x "$mise_install_root/$name"
@@ -67,8 +66,16 @@ printf '%s\n' "$*" >>"$OMARCHY_TEST_MISE_HISTORY"
 
 if [[ $1 == "where" ]]; then
   if [[ ${OMARCHY_TEST_AGENT_INSTALLED:-false} == "true" ]]; then
+    printf '%s\n' "$OMARCHY_TEST_MISE_INSTALL_ROOT"
+    exit 0
+  fi
+  exit 1
+fi
+
+if [[ $1 == "which" && $# == 4 && $2 == "--tool" ]]; then
+  if [[ ${OMARCHY_TEST_AGENT_INSTALLED:-false} == "true" ]]; then
     printf '%s
-' "$OMARCHY_TEST_MISE_INSTALL_ROOT"
+' "$OMARCHY_TEST_MISE_INSTALL_ROOT/$4"
     exit 0
   fi
   exit 1
@@ -144,7 +151,7 @@ assert_lazy_stub() {
     fail "$command points at the mise binary"
 
   mapfile -t mise_calls <"$mise_history"
-  [[ ${mise_calls[0]} == "use -g --quiet $package" && ${mise_calls[1]} == "where $package" ]] ||
+  [[ ${mise_calls[0]} == "use -g --quiet $package" && ${mise_calls[1]} == "which --tool $package $command" ]] ||
     fail "$command lazy stub preserves its mise package"
 }
 

@@ -32,15 +32,12 @@ mkdir -p "$HOME/.local/bin"
 # its binary as ugrep via exec -a). Symlink the real binary so the kernel
 # keeps the intended invocation name.
 #
-# These tools install and upgrade on first run, so mise's release cooldown would
-# hold a new version back for days after it ships. Exported rather than set on
-# the install line alone, so resolving the version to link agrees with the one
-# just installed.
+# Disable the release cooldown for both installation and path resolution, so
+# the selected executable agrees with the version just installed.
 export MISE_MINIMUM_RELEASE_AGE=0
 mise use -g --quiet "$package" || exit 1
 
-install_root=$(mise where "$package") || exit 1
-target="$install_root/$bin"
+target=$(mise which --tool "$package" "$bin") || exit 1
 if [[ ! -x $target ]]; then
   exit 1
 fi

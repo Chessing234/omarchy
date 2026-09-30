@@ -19,8 +19,8 @@ cat >"$stub_bin/mise" <<'SH'
 #!/bin/bash
 printf '%s\n' "$*" >>"$MISE_LOG"
 
-if [[ $1 == "where" ]]; then
-  printf '%s\n' "$MISE_INSTALLS/$2"
+if [[ $1 == "which" && $# == 4 && $2 == "--tool" ]]; then
+  printf '%s\n' "$MISE_INSTALLS/$3/$4"
   exit 0
 fi
 
