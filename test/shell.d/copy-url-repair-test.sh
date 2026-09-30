@@ -113,6 +113,42 @@ pass "stale SingletonLock does not block the repair"
 rm -f "$preferences.omarchy-copy-url-repair.bak"
 close_browser
 
+# A lock whose PID is not locally visible can still have a browser socket.
+write_stale_preferences
+stale_browser_lock
+python3 - "$profile_root/SingletonSocket" <<'PY_SOCKET'
+import socket
+import sys
+with socket.socket(socket.AF_UNIX) as sock:
+    sock.bind(sys.argv[1])
+PY_SOCKET
+before_hash=$(sha256sum "$preferences" | cut -d' ' -f1)
+run_migration && fail "socket prevents repair when the lock PID is unavailable"
+[[ $(sha256sum "$preferences" | cut -d' ' -f1) == "$before_hash" ]] ||
+  fail "socket-protected preferences remain untouched"
+rm -f "$profile_root/SingletonSocket"
+close_browser
+pass "browser socket protects a profile with an unavailable lock PID"
+
+# An interrupted backup must not block all future migrations if its profile
+# was removed or became unreadable. Keep the backup for manual recovery.
+write_stale_preferences
+cp "$preferences" "$preferences.omarchy-copy-url-repair.bak"
+backup_hash=$(sha256sum "$preferences.omarchy-copy-url-repair.bak" | cut -d' ' -f1)
+rm "$preferences"
+open_browser
+run_migration || fail "missing profile does not hold unrelated migrations"
+printf '{broken json' >"$preferences"
+run_migration || fail "corrupt profile does not hold unrelated migrations"
+[[ $(cat "$preferences") == '{broken json' ]] || fail "corrupt preferences remain untouched"
+[[ $(sha256sum "$preferences.omarchy-copy-url-repair.bak" | cut -d' ' -f1) == "$backup_hash" ]] ||
+  fail "unreadable profile retains its recovery backup"
+close_browser
+write_stale_preferences
+run_migration || fail "restored profile can be repaired later"
+assert_repaired || fail "restored profile receives the shortcut repair"
+pass "missing and corrupt profiles keep backups without blocking migrations"
+
 # gum paints its prompt on stderr, so that stream has to stay attached:
 # suppressing it leaves gum reading keys behind an unpainted screen, which
 # reads as a hung update.
