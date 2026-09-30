@@ -33,7 +33,7 @@ chmod +x "$test_home/.config/omarchy/hooks/agent-launch"
 HOME="$test_home" PATH="$mock_bin:$ROOT/bin:$PATH" OMARCHY_TEST_HOOK_LOG="$hook_log" \
   bash -c 'cd "$1" && omarchy-agent --inline' bash "$test_home/Work/demo"
 
-grep -Fx "pi $test_home/Work/demo" "$hook_log" ||
+grep -Fxq "pi $test_home/Work/demo" "$hook_log" ||
   fail "agent-launch hook did not see harness and cwd" "$(cat "$hook_log" 2>/dev/null)"
 pass "agent-launch hook runs with harness and cwd"
 
