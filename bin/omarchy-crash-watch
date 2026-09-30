@@ -18,6 +18,10 @@ readonly CRASH_GLYPH=$'\U000f16a1'
 # window.
 readonly dedupe_seconds=${OMARCHY_CRASH_DEDUPE_SECONDS:-60}
 
+# Diagnosing a crash often reproduces it. Mute toasts for that program while
+# omarchy-agent-crash's marker is fresh so each hop does not spawn another agent.
+readonly diagnosis_seconds=${OMARCHY_CRASH_DIAGNOSIS_SECONDS:-1800}
+
 # Extended regex of process names never worth announcing.
 readonly ignore_pattern=${OMARCHY_CRASH_IGNORE:-}
 
@@ -41,7 +45,7 @@ announce() {
     --urgency critical \
     --glyph "$CRASH_GLYPH" \
     "Process crashed: $comm" \
-    "Click to diagnose with AI" \
+    "Click to diagnose with AI · right-click or ✕ to dismiss" \
     --exec omarchy-agent-crash "$pid" "$comm" "$exe" "$signal"
 }
 
@@ -100,6 +104,17 @@ journalctl -f -n 0 -o json "MESSAGE_ID=$COREDUMP_MESSAGE_ID" 2>/dev/null |
     omarchy-toggle-enabled "crash-ignore/$name" && continue
 
     now=$EPOCHSECONDS
+
+    # omarchy-agent-crash stamps a per-program marker before launching the
+    # agent. Skip reproductions while that stamp is inside the diagnosis window.
+    diagnosis_flag="${XDG_RUNTIME_DIR:-/run/user/$UID}/omarchy/crash-diagnosis/$name"
+    if [[ -f $diagnosis_flag ]]; then
+      started=$(<"$diagnosis_flag")
+      if [[ $started =~ ^[0-9]+$ ]] && ((now - started < diagnosis_seconds)); then
+        continue
+      fi
+    fi
+
     (((now - ${last_notified[$name]:-0}) < dedupe_seconds)) && continue
 
     # Only a delivered toast starts the dedupe window. A failed send that

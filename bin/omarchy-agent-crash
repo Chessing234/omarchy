@@ -49,4 +49,15 @@ mechanism, read the skill files directly and follow them instead:
 PROMPT
 )
 
+# Match the watcher's announced name so a reproduction during diagnosis does
+# not open another toast (and another agent) for the same program.
+name=$comm
+[[ $exe == /* ]] && name=${exe##*/}
+name=${name##*/}
+[[ -n $name && $name != "-" && $name != "." && $name != ".." ]] || name=unknown
+
+state_dir="${XDG_RUNTIME_DIR:-/run/user/$UID}/omarchy/crash-diagnosis"
+mkdir -p "$state_dir"
+printf '%s\n' "$(date +%s)" >"$state_dir/$name"
+
 exec omarchy-agent --prompt "$prompt"
