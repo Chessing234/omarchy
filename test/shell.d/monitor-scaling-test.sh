@@ -265,3 +265,62 @@ OMARCHY_TEST_MONITOR_SCALE=2 run_scaling 1.6
 grep -Fx 'hl.monitor({ output = "eDP-1", mode = "preferred", position = "0x0", scale = 1.6 })' "$dotfiles_named" >/dev/null ||
   fail "named-rule persist must update the symlink target content"
 pass "monitor scaling preserves symlinked monitors.lua for named rules"
+
+# A failed transform/publication must not truncate the real dotfile, silently
+# fall back to appending a rule, or report success after the live change.
+real_awk=$(command -v awk)
+real_cat=$(command -v cat)
+real_sed=$(command -v sed)
+real_mv=$(command -v mv)
+export OMARCHY_TEST_REAL_AWK="$real_awk" OMARCHY_TEST_REAL_CAT="$real_cat"
+export OMARCHY_TEST_REAL_SED="$real_sed" OMARCHY_TEST_REAL_MV="$real_mv"
+cat >"$stub_bin/awk" <<'STUB'
+#!/bin/bash
+if [[ ${OMARCHY_TEST_FAIL:-} == awk && $* == *'function strip_comment'* ]]; then
+  printf 'partial transform\n'
+  exit 2
+fi
+exec "$OMARCHY_TEST_REAL_AWK" "$@"
+STUB
+cat >"$stub_bin/cat" <<'STUB'
+#!/bin/bash
+if [[ ${OMARCHY_TEST_FAIL:-} == cat && ${1:-} == *.omarchy-scale.* ]]; then
+  printf 'partial write\n'
+  exit 1
+fi
+exec "$OMARCHY_TEST_REAL_CAT" "$@"
+STUB
+cat >"$stub_bin/sed" <<'STUB'
+#!/bin/bash
+if [[ ${OMARCHY_TEST_FAIL:-} == sed && $* == *GDK_SCALE* ]]; then
+  exit 1
+fi
+exec "$OMARCHY_TEST_REAL_SED" "$@"
+STUB
+cat >"$stub_bin/mv" <<'STUB'
+#!/bin/bash
+if [[ ${OMARCHY_TEST_FAIL:-} == mv ]]; then exit 1; fi
+exec "$OMARCHY_TEST_REAL_MV" "$@"
+STUB
+chmod +x "$stub_bin/"{awk,cat,sed,mv}
+for failure in awk cat sed mv; do
+  cat >"$dotfiles_named" <<'LUA'
+local omarchy_gdk_scale = 2
+hl.env("GDK_SCALE", "2")
+hl.monitor({ output = "eDP-1", mode = "preferred", position = "0x0", scale = 2 })
+LUA
+  cp "$dotfiles_named" "$test_tmp/expected"
+  if OMARCHY_TEST_FAIL="$failure" run_scaling 3 >"$test_tmp/output" 2>&1; then
+    fail "monitor scaling reports $failure persistence failure"
+  fi
+  cmp "$dotfiles_named" "$test_tmp/expected" || fail "$failure leaves the original bytes intact"
+  [[ -L $monitor_lua && $(readlink "$monitor_lua") == "$pre_target" ]] || fail "$failure preserves symlink"
+  grep -F 'could not be saved' "$test_tmp/output" >/dev/null || fail "$failure reports live/persisted difference"
+  [[ -z $(find "$test_tmp" -name '*.omarchy-scale.*' -print) ]] || fail "$failure cleans temporary files"
+  pass "monitor scaling preserves the original and reports $failure failure"
+done
+chmod 640 "$dotfiles_named"
+run_scaling 3
+[[ $(stat -c %a "$dotfiles_named") == 640 ]] || fail "atomic monitor update preserves mode"
+grep -Fx 'hl.env("GDK_SCALE", "3")' "$dotfiles_named" >/dev/null || fail "atomic update includes GDK scale"
+pass "monitor scaling publishes both settings and preserves mode"

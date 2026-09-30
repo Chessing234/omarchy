@@ -98,8 +98,8 @@ persist_gdk_scale() {
 
 # Rewrite `scale = ...` inside the hl.monitor entry naming this output,
 # whether that entry is one line or the multi-line form nwg-displays writes.
-# Succeeds only when such an entry was found. Commented-out examples and
-# rules for other outputs are left alone.
+# Returns 0 when updated, 1 when absent, and 2 on failure. The caller passes
+# a private staged file; commented-out examples and other outputs stay alone.
 update_named_monitor_scale() {
   local monitor="$1"
   local scale="$2"
@@ -109,9 +109,9 @@ update_named_monitor_scale() {
 
   # Write through a symlink rather than replacing it (stow/dotfiles setups).
   if [[ -L $file ]]; then
-    target=$(readlink -f -- "$file") || return 1
+    target=$(readlink -f -- "$file") || return 2
   fi
-  tmp="${target}.omarchy-scale.$$"
+  tmp=$(mktemp "${target}.omarchy-scale.XXXXXX") || return 2
 
   if awk -v monitor="$monitor" -v scale="$scale" '
     function strip_comment(s) {
@@ -184,17 +184,67 @@ update_named_monitor_scale() {
     }
     END {
       printf "%s", buffer
-      exit changed ? 0 : 1
+      exit changed ? 0 : 3
     }
   ' "$file" >"$tmp"; then
-    cat "$tmp" >"$file"
-    rm -f "$tmp"
-    return 0
+    if cat "$tmp" >"$file"; then
+      rm -f "$tmp"
+      return 0
+    else
+      rm -f "$tmp"
+      return 2
+    fi
   else
+    local status=$?
     rm -f "$tmp"
-    return 1
+    if (( status == 3 )); then
+      return 1
+    else
+      return 2
+    fi
   fi
 }
+
+persist_monitor_scale() (
+  local monitor_lua="$1"
+  local active_monitor="$2"
+  local new_scale="$3"
+  local new_gdk_scale="$4"
+  local target stage status
+
+  target=$(readlink -f -- "$monitor_lua") || return 1
+  stage=$(mktemp "${target}.omarchy-scale.XXXXXX") || return 1
+  trap 'rm -f -- "$stage"' EXIT
+  cp -- "$target" "$stage" || return 1
+
+  if update_named_monitor_scale "$active_monitor" "$new_scale" "$stage"; then
+    persist_gdk_scale "$new_gdk_scale" "$stage" || return 1
+  else
+    status=$?
+    # Only an absent named rule permits fallback. Read/write errors are fatal.
+    (( status == 1 )) || return 1
+    if grep -q '^local omarchy_monitor_scale = ' "$stage"; then
+      sed -i -E \
+        -e "s|^local omarchy_monitor_scale = .*|local omarchy_monitor_scale = ${new_scale}|" \
+        -e "s|^local omarchy_gdk_scale = .*|local omarchy_gdk_scale = ${new_gdk_scale}|" \
+        "$stage" || return 1
+    elif grep -Eq '^hl\.monitor\(\{ output = "", mode = "preferred", position = "auto", scale = ("auto"|[0-9.]+) \}\)' "$stage"; then
+      sed -i -E \
+        -e "s|^(hl\.monitor\(\{ output = \"\", mode = \"preferred\", position = \"auto\", scale = )([^ ]+)( \}\))|\\1${new_scale}\\3|" \
+        -e 's|^hl\.env\("GDK_SCALE", ".*"\)|hl.env("GDK_SCALE", "'"$new_gdk_scale"'")|' \
+        "$stage" || return 1
+    else
+      printf '\nhl.monitor({ output = "%s", mode = "preferred", position = "auto", scale = %s })\n' \
+        "$active_monitor" "$new_scale" >>"$stage" || return 1
+      persist_gdk_scale "$new_gdk_scale" "$stage" || return 1
+    fi
+  fi
+
+  # Publish all edits together, following dotfile symlinks without replacing
+  # the link. Failed transforms or publication leave the original untouched.
+  cp --attributes-only --preserve=mode,ownership,xattr -- "$target" "$stage" || return 1
+  mv -f -- "$stage" "$target"
+)
 
 set_scale() {
   local requested_scale="$1"
@@ -228,34 +278,9 @@ set_scale() {
 
   [[ -f $monitor_lua ]] || return 0
 
-  # A named hl.monitor rule for this output overrides the catch-all, so it
-  # must be updated in place. Writing only the generic default leaves that
-  # rule stale, and omarchy-hyprland-monitor-watch's docked poller re-applies
-  # the stale file scale every ~2s.
-  # --follow-symlinks: GNU sed -i otherwise replaces a symlink with a regular
-  # file (stow/dotfiles setups keep monitors.lua linked into a repo).
-  if update_named_monitor_scale "$active_monitor" "$new_scale" "$monitor_lua"; then
-    persist_gdk_scale "$new_gdk_scale" "$monitor_lua"
-  elif grep -q '^local omarchy_monitor_scale = ' "$monitor_lua"; then
-    sed --follow-symlinks -i -E \
-      -e "s|^local omarchy_monitor_scale = .*|local omarchy_monitor_scale = ${new_scale}|" \
-      -e "s|^local omarchy_gdk_scale = .*|local omarchy_gdk_scale = ${new_gdk_scale}|" \
-      "$monitor_lua"
-  elif grep -Eq '^hl\.monitor\(\{ output = "", mode = "preferred", position = "auto", scale = ("auto"|[0-9.]+) \}\)' "$monitor_lua"; then
-    sed --follow-symlinks -i -E \
-      -e "s|^(hl\.monitor\(\{ output = \"\", mode = \"preferred\", position = \"auto\", scale = )([^ ]+)( \}\))|\\1${new_scale}\\3|" \
-      -e 's|^hl\.env\("GDK_SCALE", ".*"\)|hl.env("GDK_SCALE", "'"$new_gdk_scale"'")|' \
-      "$monitor_lua"
-  else
-    # No named rule and no generic default matched. Appending a named rule is
-    # the safe persist: Hyprland's named output rules override a catch-all
-    # regardless of order, so other monitors keep whatever they already have.
-    # Rewriting a catch-all we failed to recognize would retarget every
-    # unpinned output; leaving the file untouched lets the 2s poller undo the
-    # live eval we just applied.
-    printf '\nhl.monitor({ output = "%s", mode = "preferred", position = "auto", scale = %s })\n' \
-      "$active_monitor" "$new_scale" >>"$monitor_lua"
-    persist_gdk_scale "$new_gdk_scale" "$monitor_lua"
+  if ! persist_monitor_scale "$monitor_lua" "$active_monitor" "$new_scale" "$new_gdk_scale"; then
+    echo "Monitor scaling changed live, but could not be saved to $monitor_lua." >&2
+    return 1
   fi
 }
 
