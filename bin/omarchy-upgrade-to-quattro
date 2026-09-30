@@ -1478,6 +1478,7 @@ apply_user_transition() {
     OMARCHY_UPGRADE_YES="$yes" \
     OMARCHY_USER_NAME="${OMARCHY_USER_NAME:-}" \
     OMARCHY_USER_EMAIL="${OMARCHY_USER_EMAIL:-}" \
+    PI_CODING_AGENT_DIR="${PI_CODING_AGENT_DIR:-}" \
     bash <<'USER_SETUP'
 set -euo pipefail
 root=/usr/share/omarchy
