@@ -26,6 +26,10 @@ while (($#)); do
       shift
       break
       ;;
+    -)
+      # Bare "-" is the stdin prompt sentinel, not an option flag.
+      break
+      ;;
     -*)
       echo "Unknown option: $1" >&2
       echo "Usage: omarchy agent prompt [--inline] [--clipboard] [<prompt...>|-]" >&2
