@@ -6,13 +6,6 @@ echo "Seed fcitx5 DefaultIM from the console keyboard layout"
 # multi-IM setups are left alone. Fresh installs get the same seed from
 # install/user/fcitx5-layout.sh.
 
-# Seed helper stops a running fcitx5 before rewriting the profile so the
-# daemon cannot flush the old layout back over the seed on exit.
-changed=$(omarchy-fcitx5-seed-layout)
-[[ $changed == changed ]] || exit 0
-
-# Bring fcitx5 back up against the rewritten profile when a session is live;
-# otherwise the next graphical login starts it cleanly.
-if systemctl --user is-active --quiet graphical-session.target; then
-  omarchy-restart-xcompose >/dev/null 2>&1 || true
-fi
+# The helper stops this user's daemon before writing and restores it on exit
+# when a graphical session is active, including on failure.
+omarchy-fcitx5-seed-layout >/dev/null

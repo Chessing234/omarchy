@@ -24,6 +24,12 @@ case "$*" in
   ;;
 *"stop"*omarchy-fcitx5*)
   echo stop >>"${STOP_CALLS:?}"
+  # Model the daemon flushing its old in-memory profile during shutdown.
+  cp "$TEST_STOCK_PROFILE" "$OMARCHY_FCITX5_PROFILE"
+  exit 0
+  ;;
+*"start"*omarchy-fcitx5*)
+  echo start >>"${RESTART_CALLS:?}"
   exit 0
   ;;
 *)
@@ -33,17 +39,25 @@ esac
 STUB
 cat >"$stub_bin/pgrep" <<'STUB'
 #!/bin/bash
-# No live fcitx5 unless a test opts in via FCITX_PGREP=0.
+# Scoped checks see only our process; an unscoped check also sees another user.
+if [[ $* == "-u $UID -x fcitx5" ]]; then
+  exit "${FCITX_PGREP:-1}"
+fi
+if [[ ${FCITX_OTHER:-1} == 0 ]]; then exit 0; fi
 exit "${FCITX_PGREP:-1}"
 STUB
 cat >"$stub_bin/pkill" <<'STUB'
 #!/bin/bash
-echo pkill >>"${STOP_CALLS:?}"
+printf 'pkill %s\n' "$*" >>"${STOP_CALLS:?}"
 exit 0
 STUB
-cat >"$stub_bin/omarchy-restart-xcompose" <<'STUB'
+cat >"$stub_bin/mkdir" <<'STUB'
 #!/bin/bash
-echo restart >>"${RESTART_CALLS:?}"
+if [[ ${TEST_WRITE_FAIL:-0} == 1 && $* == "-p $(dirname "$OMARCHY_FCITX5_PROFILE")" ]]; then
+  echo "synthetic profile write failure" >&2
+  exit 1
+fi
+exec /bin/mkdir "$@"
 STUB
 chmod +x "$stub_bin"/*
 
@@ -92,15 +106,21 @@ write_vconsole() {
   printf '%s\n' "$@" >"$test_dir/etc/vconsole.conf"
 }
 
+stock_us_profile >"$test_dir/stock-profile"
+export TEST_STOCK_PROFILE="$test_dir/stock-profile"
+export RESTART_CALLS="$test_dir/restart-calls"
+export FCITX_OTHER=1 TEST_WRITE_FAIL=0
+
 run_helper() {
   : >"$test_dir/stop-calls"
+  : >"$test_dir/restart-calls"
   SYSTEMCTL_CALLS="$test_dir/systemctl-calls" \
     STOP_CALLS="$test_dir/stop-calls" \
+    SYSTEMCTL_ACTIVE="${SYSTEMCTL_ACTIVE:-1}" \
     FCITX_ACTIVE="${FCITX_ACTIVE:-1}" \
     FCITX_PGREP="${FCITX_PGREP:-1}" \
     OMARCHY_VCONSOLE="$test_dir/etc/vconsole.conf" \
     OMARCHY_FCITX5_PROFILE="$test_dir/home/.config/fcitx5/profile" \
-    HOME="$test_dir/home" \
     PATH="$stub_bin:$PATH" \
     bash -euo pipefail "$helper"
 }
@@ -142,7 +162,47 @@ FCITX_ACTIVE=0 FCITX_PGREP=1
 grep -qx stop "$test_dir/stop-calls" || fail "helper stops omarchy-fcitx5 before writing"
 grep -qx 'DefaultIM=keyboard-fr' "$profile" || fail "profile stays fr after stop-then-write"
 pass "helper stops a running fcitx5 before rewriting the profile"
+grep -qx "pkill -u $UID -x fcitx5" "$test_dir/stop-calls" || fail "signals are scoped to this user"
 FCITX_ACTIVE=1 FCITX_PGREP=1
+
+# An unrelated user's daemon cannot block our profile rewrite or get signalled.
+stock_us_profile >"$profile"
+FCITX_OTHER=0
+[[ $(run_helper) == changed ]] || fail "another user's daemon does not block the helper"
+[[ ! -s $test_dir/stop-calls ]] || fail "another user's daemon is not stopped"
+FCITX_OTHER=1
+pass "other users' input methods are ignored"
+
+# A lingering own daemon must leave the profile untouched and restore the unit.
+stock_us_profile >"$profile"
+FCITX_ACTIVE=0 FCITX_PGREP=0 SYSTEMCTL_ACTIVE=0
+status=0
+run_helper >"$test_dir/output" 2>"$test_dir/error" || status=$?
+[[ $status == 1 && ! -s $test_dir/output ]] || fail "a lingering daemon rejects the rewrite"
+cmp -s "$profile" "$TEST_STOCK_PROFILE" || fail "a lingering daemon keeps its profile"
+grep -qx start "$test_dir/restart-calls" || fail "failed stop restores the graphical-session unit"
+pass "failed stop leaves the profile unchanged and restores the session service"
+
+# Failure while writing must also restore the session service and remain a failure.
+FCITX_PGREP=1 TEST_WRITE_FAIL=1
+status=0
+run_helper >"$test_dir/output" 2>"$test_dir/error" || status=$?
+[[ $status != 0 && ! -s $test_dir/output ]] || fail "failed profile write does not report changed"
+grep -qx start "$test_dir/restart-calls" || fail "failed write restores the graphical-session unit"
+TEST_WRITE_FAIL=0
+pass "failed write restores the session service without hiding the error"
+
+# The install leaf gets the same restart guarantee as the migration.
+: >"$test_dir/restart-calls"
+stock_us_profile >"$profile"
+SYSTEMCTL_CALLS="$test_dir/systemctl-calls" STOP_CALLS="$test_dir/stop-calls" \
+  SYSTEMCTL_ACTIVE=0 FCITX_ACTIVE=0 FCITX_PGREP=1 \
+  OMARCHY_VCONSOLE="$test_dir/etc/vconsole.conf" OMARCHY_FCITX5_PROFILE="$profile" \
+  PATH="$stub_bin:$ROOT/bin:$PATH" bash -euo pipefail "$ROOT/install/user/fcitx5-layout.sh"
+grep -qx 'DefaultIM=keyboard-fr' "$profile" || fail "install leaf seeds the profile"
+grep -qx start "$test_dir/restart-calls" || fail "install leaf restores the graphical-session unit"
+pass "install leaf restores the input method in a live session"
+FCITX_ACTIVE=1 FCITX_PGREP=1 SYSTEMCTL_ACTIVE=1
 
 stock_us_profile >"$profile"
 write_vconsole 'XKBLAYOUT=us'
@@ -191,7 +251,6 @@ run_migration() {
     FCITX_PGREP="${FCITX_PGREP:-1}" \
     OMARCHY_VCONSOLE="$test_dir/etc/vconsole.conf" \
     OMARCHY_FCITX5_PROFILE="$profile" \
-    HOME="$test_dir/home" \
     PATH="$stub_bin:$ROOT/bin:$PATH" \
     bash -euo pipefail "$migration" >"$test_dir/migration.out"
 }
@@ -200,7 +259,7 @@ stock_us_profile >"$profile"
 write_vconsole 'XKBLAYOUT=fr'
 run_migration 0
 grep -qx 'DefaultIM=keyboard-fr' "$profile" || fail "migration rewrites stock profile"
-grep -qx restart "$test_dir/restart-calls" || fail "migration restarts fcitx5 in a graphical session"
+[[ $(<"$test_dir/restart-calls") == start ]] || fail "migration restores fcitx5 exactly once in a graphical session"
 pass "migration rewrites stock and restarts fcitx5 when a session is up"
 
 stock_us_profile >"$profile"

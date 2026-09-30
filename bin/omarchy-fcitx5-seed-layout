@@ -138,18 +138,24 @@ if [[ -f $profile ]]; then
 fi
 
 # A live fcitx5 flushes its in-memory profile on shutdown and would overwrite
-# the seed we are about to write. Stop it first; the migration (or a later
-# login) starts it again against the rewritten file.
+# the seed we are about to write. Stop it first, and restore the session
+# service on every exit, including a failed stop or profile write.
+restore_fcitx5() {
+  if systemctl --user is-active --quiet graphical-session.target; then
+    systemctl --user start omarchy-fcitx5.service >/dev/null 2>&1 || true
+  fi
+}
+trap restore_fcitx5 EXIT
 if systemctl --user is-active --quiet omarchy-fcitx5.service 2>/dev/null ||
-  pgrep -x fcitx5 >/dev/null 2>&1; then
+  pgrep -u "$UID" -x fcitx5 >/dev/null 2>&1; then
   systemctl --user stop omarchy-fcitx5.service 2>/dev/null || true
-  pkill -x fcitx5 >/dev/null 2>&1 || true
+  pkill -u "$UID" -x fcitx5 >/dev/null 2>&1 || true
   # Wait for the process to finish saving so our write is the last one.
   for _ in 1 2 3 4 5 6 7 8 9 10; do
-    pgrep -x fcitx5 >/dev/null 2>&1 || break
+    pgrep -u "$UID" -x fcitx5 >/dev/null 2>&1 || break
     sleep 0.1
   done
-  if pgrep -x fcitx5 >/dev/null 2>&1; then
+  if pgrep -u "$UID" -x fcitx5 >/dev/null 2>&1; then
     echo "fcitx5 still running after stop; not rewriting profile" >&2
     exit 1
   fi
