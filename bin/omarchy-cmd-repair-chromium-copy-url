@@ -68,6 +68,12 @@ def ghost_id(command):
 if mode == "check":
     sys.exit(0 if any(ghost_id(c) for c in commands.values()) else 1)
 
+if mode == "verify":
+    if any(ghost_id(c) for c in commands.values()):
+        sys.exit(1)
+    path.with_name(path.name + ".omarchy-copy-url-repair.bak").unlink(missing_ok=True)
+    sys.exit(0)
+
 # Chromium keeps one shortcut per command, so a ghost may only be rebound
 # when the pinned extension holds no copy-url binding of its own; further
 # ghosts are dropped rather than doubled up.
@@ -93,11 +99,6 @@ for accelerator in list(commands):
     changed = True
 
 if changed:
-    # Chromium HMACs extension prefs under protection.macs. Editing
-    # Preferences while leaving those MACs in place looks like tampering, and
-    # the next browser start restores the ghost. Drop the seal so Chromium
-    # re-computes it from the repaired file.
-    preferences.pop("protection", None)
     shutil.copy2(path, path.with_name(path.name + ".omarchy-copy-url-repair.bak"))
     text = json.dumps(preferences, separators=(",", ":"))
     fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
@@ -224,7 +225,7 @@ if (( ! ${#pending[@]} )) && ! unverified_repairs_exist; then
 fi
 
 # A running browser holds Preferences in memory and rewrites the file on exit,
-# reverting the repair. Quiet callers (login, first-run, browser launch) skip
+# reverting the repair. Quiet callers (login and first-run) skip
 # and retry later. Prompted migrations ask for the affected windows to close.
 # gum draws the prompt on stderr, so it must stay attached: suppressing it
 # leaves gum waiting for a keypress behind an unpainted screen. Without a
@@ -263,19 +264,20 @@ if affected_profile_open; then
   exit 0
 fi
 
-# One that started and already exited mid-repair wrote its stale in-memory
-# Preferences back over the repair; verify every file again. A browser
-# starting after this point reads the repaired file, so it can no longer
-# restore the ghost.
-if (( ${#pending[@]} > 0 )); then
-  for preferences in "${pending[@]}"; do
-    if python3 -c "$repair_py" "$preferences" "$pinned_id" check; then
+# Verify all attempted repairs while the profiles are closed, including backups
+# left by an interrupted earlier run. Once the file is clean, the backup is no
+# longer a pending marker: keeping it would prompt on every later browser run.
+for profile_root in "${profile_roots[@]}"; do
+  for backup in "$profile_root"/*/Preferences.omarchy-copy-url-repair.bak; do
+    [[ -f $backup ]] || continue
+    preferences=${backup%.omarchy-copy-url-repair.bak}
+    if ! python3 -c "$repair_py" "$preferences" "$pinned_id" verify; then
       if (( prompt )); then
-        echo "A browser undid the Copy URL shortcut repair on exit." >&2
+        echo "The Copy URL shortcut repair could not be verified." >&2
         echo "Close the browser windows, then run: omarchy-migrate" >&2
         exit 1
       fi
       exit 0
     fi
   done
-fi
+done
