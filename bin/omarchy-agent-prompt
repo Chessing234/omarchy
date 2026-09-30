@@ -9,13 +9,13 @@
 
 set -euo pipefail
 
-inline=()
+inline=false
 from_clipboard=false
 
 while (($#)); do
   case "$1" in
     --inline)
-      inline=(--inline)
+      inline=true
       shift
       ;;
     --clipboard)
@@ -67,4 +67,8 @@ else
   exit 1
 fi
 
-exec omarchy-agent "${inline[@]}" --prompt "$prompt"
+if [[ $inline == "true" ]]; then
+  exec omarchy-agent --inline --prompt "$prompt"
+else
+  exec omarchy-agent --prompt "$prompt"
+fi
