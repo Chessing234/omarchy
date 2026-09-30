@@ -35,9 +35,10 @@ printf 'sysctl %s\n' "$*" >>"$TEST_CALLS"
 if [[ $* == '-n dev.tty.ldisc_autoload' ]]; then
   if [[ $TEST_MODE == read-error ]]; then echo read-error >&2; exit 1; fi
   cat "$TEST_VALUE"
-elif [[ $1 == -p && $2 == "$TEST_CONFIG" && ${TEST_SUDO:-} == 1 ]]; then
+elif [[ ${TEST_SUDO:-} == 1 ]] && { [[ $* == '-w dev.tty.ldisc_autoload=0' ]] || [[ $1 == -p && $2 == "$TEST_CONFIG" ]]; }; then
   if [[ $TEST_MODE == apply-error ]]; then echo apply-error >&2; exit 1; fi
   if [[ $TEST_MODE != unchanged ]]; then printf '0\n' >"$TEST_VALUE"; fi
+  if [[ $1 == -p ]] && grep -q 'unsupported.example' "$TEST_CONFIG"; then echo unsupported-key >&2; exit 1; fi
 else
   echo unexpected-sysctl >&2
   exit 99
@@ -46,7 +47,7 @@ SH
 cat >"$case_root/bin/sudo" <<'SH'
 #!/bin/bash
 printf 'sudo %s\n' "$*" >>"$TEST_CALLS"
-[[ $1 == sysctl && $2 == -p && $3 == "$TEST_CONFIG" ]] || exit 99
+[[ $1 == sysctl ]] && { [[ $* == 'sysctl -w dev.tty.ldisc_autoload=0' ]] || [[ $2 == -p && $3 == "$TEST_CONFIG" ]]; } || exit 99
 if [[ $TEST_MODE == sudo-error ]]; then echo sudo-error >&2; exit 1; fi
 export TEST_SUDO=1
 exec "$@"
@@ -69,7 +70,7 @@ run_case() {
   TEST_MODE="$mode" PATH="$case_root/bin:$PATH" bash -euo pipefail "$case_root/migration.sh" >"$case_root/output" 2>&1 || status=$?
   (( status == expected )) || fail "$label has the expected completion status" "$(cat "$case_root/output")"
   if (( apply )); then
-    grep -Fq "sudo sysctl -p $TEST_CONFIG" "$TEST_CALLS" || fail "$label applies through sudo"
+    grep -Fq "sudo sysctl " "$TEST_CALLS" || fail "$label applies through sudo"
   else
     ! grep -q '^sudo ' "$TEST_CALLS" || fail "$label must not apply the drop-in"
   fi
@@ -97,3 +98,5 @@ run_case 'runtime zero cannot hide a missing persisted setting' 'vm.swappiness=1
 run_case 'later conflicting assignment stays pending' "$setting"$'\ndev.tty.ldisc_autoload=1' 0 normal 1 0 0
 run_case 'commented setting is not persistent protection' "# $setting" 0 normal 1 0 0
 run_case 'whitespace and an inline comment are accepted' ' dev.tty.ldisc_autoload = 0 # hardened' 0 normal 0 0 0
+
+run_case 'unrelated unsupported key does not block the owned setting' "$setting"$'\nunsupported.example=1' 1 normal 0 1 0
