@@ -144,3 +144,15 @@ pass "image menu owns locks for exactly one generator lifetime"
 awk_hits=$(awk '/^thumbnail_for\(\)/,/^}/' "$ROOT/bin/omarchy-menu-images" | grep -c awk || true)
 (( awk_hits == 0 )) || fail "thumbnail_for looks up the index in memory, not via awk per image"
 pass "thumbnail_for does not scan index.tsv with awk per image"
+
+rm -rf "$cache_home"
+mkdir -p "$cache_home"
+rows=$(PATH="$stub_bin:$PATH" XDG_CACHE_HOME="$cache_home" \
+  "$ROOT/bin/omarchy-menu-images" --print-rows "$images")
+
+(( $(wc -l <<<"$rows") == 3 )) || fail "image menu prints one row per image"
+while IFS=$'\t' read -r row_image row_thumbnail; do
+  [[ $row_image == "$images"/* && -f $row_thumbnail ]] ||
+    fail "image menu prints each image with its generated thumbnail"
+done <<<"$rows"
+pass "image menu prints its rows for the shell to hold"
