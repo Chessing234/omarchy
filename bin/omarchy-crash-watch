@@ -20,7 +20,8 @@ readonly dedupe_seconds=${OMARCHY_CRASH_DEDUPE_SECONDS:-60}
 
 # Diagnosing a crash often reproduces it. Mute toasts for that program while
 # omarchy-agent-crash's marker is fresh so each hop does not spawn another agent.
-readonly diagnosis_seconds=${OMARCHY_CRASH_DIAGNOSIS_SECONDS:-1800}
+# The launcher detaches, so keep this bounded grace period short.
+readonly diagnosis_seconds=${OMARCHY_CRASH_DIAGNOSIS_SECONDS:-300}
 
 # Extended regex of process names never worth announcing.
 readonly ignore_pattern=${OMARCHY_CRASH_IGNORE:-}
@@ -110,9 +111,10 @@ journalctl -f -n 0 -o json "MESSAGE_ID=$COREDUMP_MESSAGE_ID" 2>/dev/null |
     diagnosis_flag="${XDG_RUNTIME_DIR:-/run/user/$UID}/omarchy/crash-diagnosis/$name"
     if [[ -f $diagnosis_flag ]]; then
       started=$(<"$diagnosis_flag")
-      if [[ $started =~ ^[0-9]+$ ]] && ((now - started < diagnosis_seconds)); then
+      if [[ $started =~ ^[0-9]{1,10}$ ]] && ((now >= 10#$started && now - 10#$started < diagnosis_seconds)); then
         continue
       fi
+      rm -f -- "$diagnosis_flag" 2>/dev/null || true
     fi
 
     (((now - ${last_notified[$name]:-0}) < dedupe_seconds)) && continue

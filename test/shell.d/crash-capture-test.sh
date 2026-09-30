@@ -116,6 +116,7 @@ run_watch() {
   JOURNAL_ENTRIES="$JOURNAL_ENTRIES" \
   NOTIFY_LOG="$NOTIFY_LOG" \
   HOME="$watch_home" \
+  XDG_RUNTIME_DIR="$TMPDIR/runtime" \
     "$ROOT/bin/omarchy-crash-watch" || status=$?
 
   (( status == 0 )) ||
@@ -377,9 +378,10 @@ pass "a mute that could not be written is not reported as one"
 # investigation does not open another toast (and another agent).
 runtime="$TMPDIR/runtime"
 mkdir -p "$runtime"
+export AGENT_LAUNCH_LOG="$TMPDIR/agent-launch-log"
 cat >"$watch_bin/omarchy-agent" <<'SH'
 #!/bin/bash
-exit 0
+printf 'launched\n' >>"$AGENT_LAUNCH_LOG"
 SH
 cat >"$watch_bin/coredumpctl" <<'SH'
 #!/bin/bash
@@ -405,6 +407,31 @@ PATH="$watch_bin:$ROOT/bin:$PATH" \
 ! announced brave ||
   fail "a crash reproduction during diagnosis still announces itself"
 pass "a crash reproduction during diagnosis stays quiet"
+
+# A detached launch gets a short grace period, not a blind half-hour mute.
+for stamp in "$((EPOCHSECONDS - 301))" "$((EPOCHSECONDS + 3600))" invalid 999999999999999999999999; do
+  printf '%s\n' "$stamp" >"$runtime/omarchy/crash-diagnosis/brave"
+  run_watch
+  announced brave || fail "expired, future, or invalid diagnosis markers must not mute crashes"
+  [[ ! -e $runtime/omarchy/crash-diagnosis/brave ]] || fail "stale diagnosis marker is removed"
+done
+pass "expired, future and invalid diagnosis markers stop suppressing crashes"
+
+# Both mkdir and marker-write failures must still reach the real launcher path.
+for failure in directory write; do
+  : >"$AGENT_LAUNCH_LOG"
+  if [[ $failure == directory ]]; then
+    bad_runtime="$TMPDIR/runtime-is-a-file"
+    touch "$bad_runtime"
+  else
+    bad_runtime="$TMPDIR/runtime-write-failure"
+    mkdir -p "$bad_runtime/omarchy/crash-diagnosis/brave"
+  fi
+  OMARCHY_PATH="$ROOT" PATH="$watch_bin:$ROOT/bin:$PATH" XDG_RUNTIME_DIR="$bad_runtime" \
+    "$ROOT/bin/omarchy-agent-crash" 4242 brave /usr/bin/brave SIGTRAP
+  grep -Fxq launched "$AGENT_LAUNCH_LOG" || fail "marker $failure failure must not prevent agent launch"
+done
+pass "marker directory and write failures do not prevent diagnosis"
 
 # The toast must say how to dismiss without launching the agent: left-click
 # diagnoses, right-click / X dismisses (see NotificationCard).
