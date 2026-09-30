@@ -36,6 +36,10 @@ write_pci 0x14e4:0x43ba
 hw && fail "a brcmfmac part is not the wl driver"
 pass "newer Broadcom Wi-Fi is left to brcmfmac"
 
+write_pci 0x8086:0x43a0
+hw && fail "the device ID under a different vendor is rejected"
+pass "matching device IDs under unrelated vendors are rejected"
+
 write_pci
 hw && fail "empty PCI space is not bcm43xx"
 pass "a machine with no PCI devices is not bcm43xx"

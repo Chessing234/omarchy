@@ -19,13 +19,13 @@ if omarchy-hw-nvidia; then
 
   # Configure modprobe for early KMS
   mkdir -p /etc/modprobe.d
-  cat > /etc/modprobe.d/nvidia.conf <<'NVEOF'
+  cat > /etc/modprobe.d/nvidia.conf <<'EOF'
 options nvidia_drm modeset=1
-NVEOF
+EOF
 
   # Configure mkinitcpio for early loading
   mkdir -p /etc/mkinitcpio.conf.d
-  cat > /etc/mkinitcpio.conf.d/nvidia.conf <<'NVEOF'
+  cat > /etc/mkinitcpio.conf.d/nvidia.conf <<'EOF'
 MODULES+=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)
-NVEOF
+EOF
 fi

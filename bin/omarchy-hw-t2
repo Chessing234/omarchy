@@ -4,8 +4,7 @@
 # omarchy:hidden=true
 
 # Vendor 106b (Apple), devices 1801/1802. Read cached sysfs IDs rather than
-# lspci, which reads PCI config space. The chatty lspci | grep -q form also
-# SIGPIPE'd on a long device list and looked like "no T2" under pipefail.
+# lspci, which reads PCI config space and can wake suspended devices.
 
 pci_devices_path="${OMARCHY_PCI_DEVICES_PATH:-/sys/bus/pci/devices}"
 

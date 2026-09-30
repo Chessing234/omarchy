@@ -37,6 +37,10 @@ write_pci 0x106b:0x1803:0x068000
 hw_t2 && fail "a different Apple PCI id is not a T2 chip"
 pass "other Apple PCI functions are not treated as T2"
 
+write_pci 0x8086:0x1801:0x068000
+hw_t2 && fail "the device ID under a different vendor is rejected"
+pass "matching device IDs under unrelated vendors are rejected"
+
 write_pci
 hw_t2 && fail "empty PCI space is not T2"
 pass "a machine with no PCI devices is not T2"

@@ -52,6 +52,21 @@ run_vulkan
 [[ ! -s $tmp/pkgs ]] || fail "an Intel audio function is not a GPU" "$(cat "$tmp/pkgs")"
 pass "non-display PCI functions do not pull Vulkan drivers"
 
+write_pci 0x106b:0x030000
+run_vulkan
+[[ $(cat "$tmp/pkgs") == "vulkan-asahi" ]] || fail "Apple display gets its Vulkan package"
+pass "Apple display functions install vulkan-asahi"
+
+write_pci 0x106b:0x000000 0x8086:0x030000 0x1002:0x030000
+run_vulkan
+[[ $(cat "$tmp/pkgs") == $'vulkan-intel\nvulkan-radeon' ]] || fail "T2 non-display function does not add an Apple GPU driver"
+pass "T2 non-display functions are excluded from GPU driver selection"
+
+write_pci 0x8086:0x030200 0x1002:0x030100
+run_vulkan
+[[ $(cat "$tmp/pkgs") == $'vulkan-intel\nvulkan-radeon' ]] || fail "3D and XGA display classes are included"
+pass "3D and XGA display classes receive their vendor drivers"
+
 grep -Fq 'OMARCHY_PCI_DEVICES_PATH' "$ROOT/install/hardware/vulkan.sh" ||
   fail "Vulkan install reads the same sysfs override as omarchy-hw-nvidia"
 ! grep -E '^[^#]*lspci' "$ROOT/install/hardware/vulkan.sh" ||
