@@ -39,11 +39,15 @@ done
 prompt=""
 
 if [[ $from_clipboard == "true" ]]; then
+  if (($#)); then
+    echo "--clipboard cannot be combined with another prompt source" >&2
+    exit 1
+  fi
   if ! omarchy-cmd-present wl-paste; then
     echo "wl-paste is required for --clipboard" >&2
     exit 1
   fi
-  if ! prompt=$(wl-paste --no-newline); then
+  if ! prompt=$(wl-paste --no-newline --type text); then
     echo "Unable to read clipboard" >&2
     exit 1
   fi
@@ -64,6 +68,10 @@ elif (($# > 0)); then
 else
   echo "Usage: omarchy agent prompt [--inline] [--clipboard] [<prompt...>|-]" >&2
   exit 1
+fi
+
+if [[ $from_clipboard == "true" ]]; then
+  printf 'Launching agent with %s clipboard characters; the prompt is visible in process arguments.\n' "${#prompt}" >&2
 fi
 
 if [[ $inline == "true" ]]; then

@@ -47,12 +47,13 @@ expect_args "stdin prompt (-) reaches omarchy-agent" --prompt 'review this; echo
 
 cat >"$mock_bin/wl-paste" <<'SH'
 #!/bin/bash
+[[ $# == 3 && $1 == "--no-newline" && $2 == "--type" && $3 == "text" ]] || exit 2
 printf 'clipboard body; rm -rf /'
 SH
 chmod +x "$mock_bin/wl-paste"
 
 : >"$agent_log"
-run_prompt "$ROOT/bin/omarchy-agent-prompt" --clipboard
+run_prompt "$ROOT/bin/omarchy-agent-prompt" --clipboard 2>"$test_tmp/err"
 expect_args "--clipboard reaches omarchy-agent" --prompt 'clipboard body; rm -rf /'
 
 cat >"$mock_bin/wl-paste" <<'SH'
@@ -101,3 +102,27 @@ if [[ -s $agent_log ]] || ! grep -Fq 'Unable to read clipboard' "$test_tmp/err" 
   fail "clipboard failure must retain its cause without launching" "$(cat "$test_tmp/err")"
 fi
 pass "clipboard command failure is distinguished from an empty selection"
+
+for prompt_source in "ignored prompt" "-"; do
+  : >"$agent_log"
+  if run_prompt "$ROOT/bin/omarchy-agent-prompt" --clipboard "$prompt_source" 2>"$test_tmp/err"; then
+    fail "clipboard accepts a conflicting prompt source"
+  fi
+  [[ ! -s $agent_log ]] && grep -Fq 'cannot be combined' "$test_tmp/err" ||
+    fail "conflicting source must fail before clipboard access or launch" "$(cat "$test_tmp/err")"
+done
+pass "clipboard rejects positional and stdin sources before reading"
+
+cat >"$mock_bin/wl-paste" <<'SH'
+#!/bin/bash
+[[ $# == 3 && $1 == "--no-newline" && $2 == "--type" && $3 == "text" ]] || exit 2
+printf 'secret prompt'
+SH
+chmod +x "$mock_bin/wl-paste"
+run_prompt "$ROOT/bin/omarchy-agent-prompt" --inline --clipboard 2>"$test_tmp/err"
+expect_args "inline clipboard prompt preserves arguments" --inline --prompt 'secret prompt'
+grep -Fq '13 clipboard characters' "$test_tmp/err" &&
+  grep -Fq 'visible in process arguments' "$test_tmp/err" &&
+  ! grep -Fq 'secret prompt' "$test_tmp/err" ||
+  fail "clipboard launch shows length and exposure without echoing its contents" "$(cat "$test_tmp/err")"
+pass "clipboard preview shows length without disclosing contents"
