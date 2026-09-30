@@ -5,9 +5,10 @@ set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/base-test.sh"
 
 export PATH="$ROOT/bin:$PATH"
+unset NO_COLOR
 
 columns() {
-  awk 'NR == 1 { print length($0) }'
+  python3 -c 'import sys; print(len(sys.stdin.buffer.readline().decode("utf-8").rstrip("\n")))'
 }
 
 strip_sgr() {
@@ -241,3 +242,10 @@ if command -v python3 >/dev/null; then
   [[ $tty_auto == *$'\033[38;2;170;187;204m'* ]] || fail "a tty colors by default" "got: $tty_auto"
   pass "a tty colors by default"
 fi
+
+output=$(NO_COLOR=1 run_on_tty omarchy-ascii Omarchy)
+[[ $output != *$'\e'* ]] || fail "NO_COLOR disables automatic terminal color"
+pass "NO_COLOR disables automatic terminal color"
+output=$(NO_COLOR=1 run_on_tty omarchy-ascii --color Omarchy)
+[[ $output == *$'\e'* ]] || fail "explicit color overrides NO_COLOR"
+pass "explicit color overrides NO_COLOR"

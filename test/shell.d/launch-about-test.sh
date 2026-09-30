@@ -283,3 +283,24 @@ if measure_layout; then
 else
   pass "a render without the logo in it is not measured"
 fi
+
+fastfetch() {
+  if [[ ${1:-} == --list-config-paths ]]; then
+    printf '%s\n' "$HOME/.config/fastfetch/" "$OMARCHY_FASTFETCH_DIR/ (*)"
+  else
+    printf '%s\0' "$@" >"$tmp_dir/fastfetch-args"
+  fi
+}
+mkdir -p "$HOME/.config/fastfetch"
+touch "$HOME/.config/fastfetch/config.jsonc"
+about_fastfetch --pipe false
+mapfile -d '' -t fetched_args <"$tmp_dir/fastfetch-args"
+[[ ${#fetched_args[@]} == 2 && ${fetched_args[0]} == --pipe && ${fetched_args[1]} == false ]] ||
+  fail "custom fastfetch configs retain control of their logo"
+pass "About preserves custom fastfetch logo configuration"
+rm "$HOME/.config/fastfetch/config.jsonc"
+about_fastfetch --pipe false
+mapfile -d '' -t fetched_args <"$tmp_dir/fastfetch-args"
+[[ ${#fetched_args[@]} == 6 && ${fetched_args[0]} == --logo-type && ${fetched_args[1]} == file && ${fetched_args[3]} == "$LOGO_FILE" ]] ||
+  fail "the default About config still receives the branding file"
+pass "default About configuration still uses its branding file"

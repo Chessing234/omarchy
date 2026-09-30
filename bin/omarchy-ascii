@@ -96,7 +96,7 @@ if [[ $color_mode == "always" ]]; then
   use_color=1
 elif [[ $color_mode == "never" ]]; then
   use_color=0
-elif [[ -t 1 ]]; then
+elif [[ -t 1 && -z ${NO_COLOR:-} ]]; then
   use_color=1
 else
   use_color=0

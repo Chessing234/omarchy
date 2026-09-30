@@ -17,9 +17,9 @@ pass "fastfetch config is valid JSON"
 
 type=$(jq -r '.logo.type' "$config")
 source_cmd=$(jq -r '.logo.source' "$config")
-[[ $type == "command-raw" ]] || fail "fastfetch sizes the logo; file logos cannot" "$type"
-pass "fastfetch sizes the logo; file logos cannot"
-[[ $source_cmd == "omarchy-fastfetch-logo" ]] || fail "fastfetch prints the Omarchy wordmark helper" "$source_cmd"
+[[ $type == "file" ]] || fail "fastfetch applies color and pipe policy to the selected file" "$type"
+pass "fastfetch uses a dynamically selected file logo"
+[[ $source_cmd == '"$(omarchy-fastfetch-logo --path)"' ]] || fail "fastfetch prints the Omarchy wordmark helper" "$source_cmd"
 pass "fastfetch prints the Omarchy wordmark helper"
 [[ $source_cmd != *about.txt* ]] || fail "fastfetch is not the 26-row About icon" "$source_cmd"
 pass "fastfetch is not the 26-row About icon"
@@ -35,7 +35,7 @@ pass "padding is still what About measures"
 
 box=$(jq -r '[.modules[] | select(type == "object" and .type == "custom") | .format][0]' "$config")
 box_plain=$(printf '%s' "$box" | sed 's/\x1b\[[0-9;]*m//g')
-box_width=${#box_plain}
+box_width=$(printf '%s' "$box_plain" | python3 -c 'import sys; print(len(sys.stdin.buffer.read().decode("utf-8")))')
 [[ $box_width == "54" ]] || fail "the module box is 54 columns so the picker can leave room for it" "$box_width"
 pass "the module box is 54 columns so the picker can leave room for it"
 
@@ -51,13 +51,11 @@ pass "the wordmark helper is executable"
 pass "full, compact, and small wordmarks are shipped"
 
 line_width() {
-  local file=$1 line max=0
-  while IFS= read -r line || [[ -n $line ]]; do
-    if (( ${#line} > max )); then
-      max=${#line}
-    fi
-  done <"$file"
-  printf '%s' "$max"
+  python3 - "$1" <<'PYTHON'
+from pathlib import Path
+import sys
+print(max(map(len, Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()), default=0))
+PYTHON
 }
 
 full_w=$(line_width "$full")
@@ -122,11 +120,23 @@ pass "NO_COLOR leaves the wordmark uncoloured"
 
 unset NO_COLOR
 coloured=$(COLUMNS=80 LINES=24 omarchy-fastfetch-logo)
-[[ $coloured == *$'\e[1m\e[32m'* ]] || fail "the wordmark is bold green" "$(printf '%q' "$coloured")"
-pass "the wordmark is bold green"
+[[ $coloured != *$'\e'* ]] || fail "redirected helper output must remain plain"
+pass "redirected helper output remains plain without NO_COLOR"
+
+for columns in 80 120 160; do
+  normal=$(COLUMNS=$columns LINES=40 omarchy-fastfetch-logo --path)
+  byte_locale=$(LC_ALL=C COLUMNS=$columns LINES=40 omarchy-fastfetch-logo --path)
+  [[ $normal == "$byte_locale" ]] || fail "the C locale must select the same file"
+done
+pass "logo path selection is independent of the inherited locale"
 
 # About keeps the branding file as a file logo so the sheen can find those cells.
 grep -q 'about_fastfetch' "$ROOT/bin/omarchy-launch-about" || fail "About still draws through a branding-file fastfetch"
 pass "About still draws through a branding-file fastfetch"
 [[ $(jq -r '.logo.source' "$config") != "~/.config/omarchy/branding/about.txt" ]] || fail "the packaged config is not About's file logo"
 pass "the packaged config is not About's file logo"
+
+require_command fastfetch
+python3 "$ROOT/test/shell.d/fastfetch-render-check.py" "$ROOT" ||
+  fail "native fastfetch preserves sizes and terminal color policy"
+pass "native fastfetch preserves sizes and terminal color policy"

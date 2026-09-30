@@ -2,12 +2,13 @@
 
 # omarchy:summary=Print an Omarchy wordmark sized to the terminal for fastfetch
 # omarchy:hidden=true
+# omarchy:args=[--path]
 
 # Fastfetch file logos are 1:1 characters and ignore --logo-width, so a 26-row
 # About icon (or the 81-column wordmark) overflows typical terminals and the
-# modules collide with it on resize. Pick the largest green Omarchy mark that
-# still leaves room for the module column. About overrides this to the branding
-# file, which is how the sheen finds those cells.
+# modules collide with it on resize. Pick the largest Omarchy mark that
+# still leaves room for the module column. The default About view uses its
+# branding file instead, which is how the sheen finds those cells.
 
 set -euo pipefail
 
@@ -42,13 +43,13 @@ max_h=$(( rows - PAD_TOP - 1 ))
 (( max_h < 1 )) && max_h=1
 
 logo_width() {
-  local line max=0
-  while IFS= read -r line || [[ -n $line ]]; do
-    if (( ${#line} > max )); then
-      max=${#line}
-    fi
-  done <"$1"
-  printf '%s' "$max"
+  # These shipped marks contain single-column Unicode glyphs. Decode UTF-8
+  # explicitly so a C locale does not count their individual bytes.
+  python3 - "$1" <<'PYTHON'
+from pathlib import Path
+import sys
+print(max((len(line) for line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()), default=0))
+PYTHON
 }
 
 logo_height() {
@@ -57,20 +58,18 @@ logo_height() {
 
 # Largest first: the full wordmark, a half-width one, then the compact O.
 # Packaged installs ship the sized marks under default/fastfetch/ (share tree);
-# etc/fastfetch/ stays as a checkout fallback.
+# The same share paths are used in a checkout.
 variants=(
   "$omarchy_path/logo.txt"
   "$omarchy_path/default/fastfetch/logo.txt"
   "$omarchy_path/default/fastfetch/logo-small.txt"
-  "$omarchy_path/etc/fastfetch/logo.txt"
-  "$omarchy_path/etc/fastfetch/logo-small.txt"
 )
 
 chosen=""
 fallback=""
 for file in "${variants[@]}"; do
   [[ -f $file ]] || continue
-  # Prefer the smallest known mark if nothing fits, not the last file scanned.
+  # The list is largest to smallest; retain the smallest existing fallback.
   fallback=$file
   w=$(logo_width "$file")
   h=$(logo_height "$file")
@@ -86,9 +85,9 @@ done
 print_logo() {
   local file=$1 line
 
-  # command-raw does not honour logo.color, so paint the wordmark here — the
-  # same bold green a file logo with color.1=green would have used.
-  if [[ -n ${NO_COLOR:-} ]]; then
+  # Direct invocations follow terminal color policy. Fastfetch uses --path
+  # and applies its own color/pipe policy to the selected file.
+  if [[ -n ${NO_COLOR:-} || ! -t 1 ]]; then
     cat "$file"
     return
   fi
@@ -99,4 +98,8 @@ print_logo() {
   done <"$file"
 }
 
-print_logo "$chosen"
+case ${1:-} in
+  --path) printf '%s\n' "$chosen" ;;
+  "") print_logo "$chosen" ;;
+  *) echo "Usage: omarchy-fastfetch-logo [--path]" >&2; exit 1 ;;
+esac
