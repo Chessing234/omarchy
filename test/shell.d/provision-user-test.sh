@@ -41,3 +41,17 @@ for skill in omarchy diagnose-crash; do
 done
 
 pass "omarchy-provision-user provisions Antigravity and Hermes skills"
+
+# Pi's config root is PI_CODING_AGENT_DIR when set; skills must land there too.
+pi_home="$test_tmp/pi-agent"
+rm -rf "$test_tmp/home/.pi" "$pi_home"
+mkdir -p "$test_tmp/home" "$test_tmp/home/.hermes/profiles/james"
+HOME="$test_tmp/home" PATH="$mock_bin:$ROOT/bin:$PATH" OMARCHY_PATH="$ROOT" \
+  OMARCHY_INSTALL="$test_tmp/install" PI_CODING_AGENT_DIR="$pi_home" \
+  bash "$ROOT/bin/omarchy-provision-user" >/dev/null ||
+  fail "omarchy-provision-user finishes with PI_CODING_AGENT_DIR set"
+[[ -L $pi_home/skills/omarchy && $(readlink "$pi_home/skills/omarchy") == "$ROOT/default/agents/skills/omarchy" ]] ||
+  fail "omarchy-provision-user links Pi skills into PI_CODING_AGENT_DIR"
+[[ ! -e $test_tmp/home/.pi/agent/skills/omarchy ]] ||
+  fail "omarchy-provision-user still writes the default Pi skills path when PI_CODING_AGENT_DIR is set"
+pass "omarchy-provision-user links Pi skills into PI_CODING_AGENT_DIR"
