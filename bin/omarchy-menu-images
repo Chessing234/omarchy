@@ -212,7 +212,6 @@ thumbnail_for() {
 
   if [[ -z $hash ]]; then
     hash=$(printf '%s\t%s' "$image" "$signature" | md5sum | cut -d ' ' -f 1)
-    thumbnail_index["$image"$'\t'"$signature"]=$hash
     printf '%s\t%s\t%s\n' "$image" "$signature" "$hash" >>"$index_file"
   fi
 

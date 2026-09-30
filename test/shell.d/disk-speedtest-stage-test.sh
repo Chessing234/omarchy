@@ -128,3 +128,23 @@ leftover=$(pgrep -f "$stub/dd" || true)
 [[ -z $leftover ]] || fail "disk speedtest does not leave staging dd running" "$leftover"
 
 pass "disk speedtest emits ordered stage rates and stops when staging finishes"
+
+# Run the actual phase function with a synthetic worker and zero measurement
+# duration. The worker must observe the transition before doing any I/O.
+(
+  eval "$(sed -n '/^run_phase() {$/,/^}$/p' "$ROOT/bin/omarchy-disk-speedtest")"
+  test_files=(synthetic)
+  worker_pids=()
+  phase_seconds=0
+  parallel=0
+  read_worker() {
+    grep -qx 'read 0' "$tmpdir/phase-output" || return 1
+    : >"$tmpdir/worker-started"
+  }
+  device_sectors() { echo 0; }
+  alive_workers() { echo 0; }
+  stop_workers() { wait "${worker_pids[@]}"; }
+  run_phase read >"$tmpdir/phase-output"
+)
+[[ -f $tmpdir/worker-started ]] || fail "read phase is announced before its worker starts"
+pass "disk speedtest switches the panel before starting read workers"

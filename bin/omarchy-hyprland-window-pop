@@ -13,46 +13,28 @@ pinned=$(echo "$active" | jq ".pinned")
 addr=$(echo "$active" | jq -r ".address")
 window="address:$addr"
 
-lua_cmds=()
+hypr_dispatch() {
+  local lua="$1"
+  shift
 
-hypr_queue() {
-  lua_cmds+=("$1")
-}
-
-# One IPC round-trip for the whole pop/unpop. Each sequential dispatch is its
-# own hyprctl process and socket; popping a window used to pay that six times.
-hypr_flush() {
-  (( ${#lua_cmds[@]} > 0 )) || return 0
-
-  local batch="" lua
-  for lua in "${lua_cmds[@]}"; do
-    batch+="dispatch ${lua}; "
-  done
-
-  # A batch is not transactional: some toggles may have run even if the
-  # response is lost. Replaying it can undo the successful actions. Hyprland's
-  # per-dispatch errors also need not produce a nonzero hyprctl exit status.
-  # Submit once and preserve transport failure; do not infer a safe retry.
-  hyprctl --batch "$batch" >/dev/null 2>&1
+  hyprctl dispatch "$lua" >/dev/null 2>&1 || hyprctl dispatch "$@" >/dev/null
 }
 
 if [[ $pinned == "true" ]]; then
-  hypr_queue "hl.dsp.window.pin({ window = \"$window\" })"
-  hypr_queue "hl.dsp.window.float({ window = \"$window\", action = \"toggle\" })"
-  hypr_queue "hl.dsp.window.tag({ window = \"$window\", tag = \"-pop\" })"
+  hypr_dispatch "hl.dsp.window.pin({ window = \"$window\" })" pin "$window"
+  hypr_dispatch "hl.dsp.window.float({ window = \"$window\", action = \"toggle\" })" togglefloating "$window"
+  hypr_dispatch "hl.dsp.window.tag({ window = \"$window\", tag = \"-pop\" })" tagwindow -pop "$window"
 elif [[ -n $addr ]]; then
-  hypr_queue "hl.dsp.window.float({ window = \"$window\", action = \"toggle\" })"
-  hypr_queue "hl.dsp.window.resize({ window = \"$window\", x = $width, y = $height })"
+  hypr_dispatch "hl.dsp.window.float({ window = \"$window\", action = \"toggle\" })" togglefloating "$window"
+  hypr_dispatch "hl.dsp.window.resize({ window = \"$window\", x = $width, y = $height })" resizeactive exact "$width" "$height" "$window"
 
   if [[ -n $x && -n $y ]]; then
-    hypr_queue "hl.dsp.window.move({ window = \"$window\", x = $x, y = $y })"
+    hypr_dispatch "hl.dsp.window.move({ window = \"$window\", x = $x, y = $y })" moveactive "$x" "$y" "$window"
   else
-    hypr_queue "hl.dsp.window.center({ window = \"$window\" })"
+    hypr_dispatch "hl.dsp.window.center({ window = \"$window\" })" centerwindow "$window"
   fi
 
-  hypr_queue "hl.dsp.window.pin({ window = \"$window\" })"
-  hypr_queue "hl.dsp.window.alter_zorder({ window = \"$window\", mode = \"top\" })"
-  hypr_queue "hl.dsp.window.tag({ window = \"$window\", tag = \"+pop\" })"
+  hypr_dispatch "hl.dsp.window.pin({ window = \"$window\" })" pin "$window"
+  hypr_dispatch "hl.dsp.window.alter_zorder({ window = \"$window\", mode = \"top\" })" alterzorder top "$window"
+  hypr_dispatch "hl.dsp.window.tag({ window = \"$window\", tag = \"+pop\" })" tagwindow +pop "$window"
 fi
-
-hypr_flush

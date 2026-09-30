@@ -162,6 +162,9 @@ run_phase() {
   local file before after deadline rate alive samples=0
   local baseline_sectors baseline_time end_time
 
+  # Switch the panel before starting workers, rather than waiting for a sample.
+  echo "$phase 0"
+
   for file in "${test_files[@]}"; do
     "${phase}_worker" "$file" 2>/dev/null &
     worker_pids+=("$!")

@@ -140,10 +140,21 @@ PATH="$stub_bin:$PATH" XDG_CACHE_HOME="$cache_home" VIPSTHUMBNAIL_CALLS_FILE="$t
 (( $(wc -l <"$tmp/calls") == 6 )) || fail "image menu releases thumbnail locks after generation"
 pass "image menu owns locks for exactly one generator lifetime"
 
-# The per-image awk scan of index.tsv was the cost of a large wallpaper set.
-awk_hits=$(awk '/^thumbnail_for\(\)/,/^}/' "$ROOT/bin/omarchy-menu-images" | grep -c awk || true)
-(( awk_hits == 0 )) || fail "thumbnail_for looks up the index in memory, not via awk per image"
-pass "thumbnail_for does not scan index.tsv with awk per image"
+# Force row rebuilding while retaining a deliberately non-derived index hash.
+# A recomputation would generate another thumbnail and append another index row.
+rm -rf "$cache_home"
+mkdir -p "$cache_dir"
+signature=$(stat -Lc '%s:%Y' "$images/one.png")
+printf '%s\t%s\t%s\n' "$images/one.png" "$signature" existing-index-key >"$cache_dir/index.tsv"
+printf 'existing thumbnail' >"$cache_dir/existing-index-key.jpg"
+: >"$tmp/calls"
+rows=$(PATH="$stub_bin:$PATH" XDG_CACHE_HOME="$cache_home" VIPSTHUMBNAIL_CALLS_FILE="$tmp/calls" \
+  "$ROOT/bin/omarchy-menu-images" --print-rows "$images")
+grep -Fxq "$(printf '%s\t%s' "$images/one.png" "$cache_dir/existing-index-key.jpg")" <<<"$rows" ||
+  fail "image menu reuses the prepopulated index hash"
+(( $(wc -l <"$cache_dir/index.tsv") == 3 )) || fail "index reuse does not append a duplicate entry"
+! grep -Fxq "$images/one.png" "$tmp/calls" || fail "index reuse does not regenerate its thumbnail"
+pass "image menu reuses existing index entries without hashing or appending them"
 
 rm -rf "$cache_home"
 mkdir -p "$cache_home"
