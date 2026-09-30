@@ -5,6 +5,8 @@ set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/base-test.sh"
 
 service="$ROOT/shell/plugins/lock/Service.qml"
+tmpdir=$(mktemp -d)
+trap 'rm -rf "$tmpdir"' EXIT
 
 grep -F 'if (passwordPam.responseVisible) return' "$service" >/dev/null ||
   fail "password respond refuses echo-on / consent prompts"
@@ -17,10 +19,10 @@ awk '
     buf = buf $0 "\n"
     if (/^  \}/) { print buf; exit }
   }
-' "$service" >"$TMPDIR/respond-fn.txt"
-grep -F 'passwordPam.respond(pendingPassword)' "$TMPDIR/respond-fn.txt" >/dev/null ||
+' "$service" >"$tmpdir/respond-fn.txt"
+grep -F 'passwordPam.respond(pendingPassword)' "$tmpdir/respond-fn.txt" >/dev/null ||
   fail "respondToPasswordPrompt calls respond()"
-grep -F 'responseVisible' "$TMPDIR/respond-fn.txt" >/dev/null ||
+grep -F 'responseVisible' "$tmpdir/respond-fn.txt" >/dev/null ||
   fail "respondToPasswordPrompt checks responseVisible"
 pass "respondToPasswordPrompt is the gated respond path"
 
@@ -32,11 +34,11 @@ awk '
     buf = buf $0 "\n"
     if (/^  \}/) { print buf; exit }
   }
-' "$service" >"$TMPDIR/failure-fn.txt"
-if grep -E 'if \(!lockRequested\) return' "$TMPDIR/failure-fn.txt" >/dev/null; then
+' "$service" >"$tmpdir/failure-fn.txt"
+if grep -E 'if \(!lockRequested\) return' "$tmpdir/failure-fn.txt" >/dev/null; then
   fail "handlePasswordFailure still bails when lockRequested is false"
 fi
-grep -F 'failureMessage = "Authentication failed' "$TMPDIR/failure-fn.txt" >/dev/null ||
+grep -F 'failureMessage = "Authentication failed' "$tmpdir/failure-fn.txt" >/dev/null ||
   fail "handlePasswordFailure still sets the failure string"
 pass "handlePasswordFailure surfaces failure without lockRequested"
 
