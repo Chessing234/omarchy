@@ -386,7 +386,8 @@ cat >"$watch_bin/coredumpctl" <<'SH'
 exit 0
 SH
 chmod +x "$watch_bin/omarchy-agent" "$watch_bin/coredumpctl"
-PATH="$watch_bin:$ROOT/bin:$PATH" HOME="$watch_home" XDG_RUNTIME_DIR="$runtime" \
+OMARCHY_PATH="$ROOT" PATH="$watch_bin:$ROOT/bin:$PATH" HOME="$watch_home" \
+  XDG_RUNTIME_DIR="$runtime" \
   "$ROOT/bin/omarchy-agent-crash" 4242 brave /usr/bin/brave SIGTRAP
 [[ -f $runtime/omarchy/crash-diagnosis/brave ]] ||
   fail "starting a crash diagnosis does not stamp the program under investigation"
