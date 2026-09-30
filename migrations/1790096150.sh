@@ -7,5 +7,5 @@ echo "Seed fcitx5 DefaultIM from the console keyboard layout"
 # install/user/fcitx5-layout.sh.
 
 # The helper stops this user's daemon before writing and restores it on exit
-# when a graphical session is active, including on failure.
+# if it was running in a graphical session, including on failure.
 omarchy-fcitx5-seed-layout >/dev/null
