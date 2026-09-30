@@ -64,9 +64,13 @@ exit 1
 BASH
 chmod +x "$tmpdir/hyprctl"
 
+status=0
 PATH="$tmpdir:$PATH" HYPRCTL_LOG="$log" \
-  "$ROOT/bin/omarchy-hyprland-window-pop" >/dev/null
+  "$ROOT/bin/omarchy-hyprland-window-pop" >/dev/null || status=$?
 
-grep -q '^--batch ' "$log" || fail "a failed batch is still attempted" "$(cat "$log")"
-grep -q '^dispatch ' "$log" || fail "a failed batch falls back to sequential dispatch" "$(cat "$log")"
-pass "a compositor without --batch still pops via sequential dispatch"
+(( status == 1 )) || fail "a failed batch preserves the failure status" "$status"
+grep -c '^--batch ' "$log" | grep -qx 1 ||
+  fail "a failed batch is attempted once" "$(cat "$log")"
+! grep -q '^dispatch ' "$log" ||
+  fail "a failed batch must not replay potentially applied toggles" "$(cat "$log")"
+pass "a failed batch does not replay window toggles"
