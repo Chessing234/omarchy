@@ -19,17 +19,81 @@ grep -Eq '^[[:space:]]*dev\.tty\.ldisc_autoload[[:space:]]*=[[:space:]]*0[[:spac
 
 pass "sysctl drop-in disables unprivileged TTY ldisc autoload"
 
-migration=$(grep -l 'ldisc_autoload\|Disable unprivileged TTY line-discipline' "$ROOT"/migrations/*.sh | head -1)
-[[ -n $migration ]] || fail "a migration applies the ldisc_autoload drop-in on existing installs"
-grep -q '99-omarchy-sysctl.conf' "$migration" ||
-  fail "migration loads the omarchy sysctl drop-in specifically"
-grep -q 'sysctl -p' "$migration" ||
-  fail "migration applies the drop-in at runtime rather than only on next boot"
-grep -q 'omarchy-state set reboot-required' "$migration" ||
-  fail "migration falls back to reboot-required when sysctl -p fails"
-grep -q 'dev.tty.ldisc_autoload' "$migration" ||
-  fail "migration skips when the runtime value is already 0"
-! grep -Eq '\|\| true' "$migration" ||
-  fail "migration must not hide sysctl/sudo failures with || true"
+migration="$ROOT/migrations/1790423600.sh"
+[[ -f $migration ]] || fail "the dedicated ldisc migration exists"
+case_root=$(mktemp -d)
+trap 'rm -rf "$case_root"' EXIT
+mkdir -p "$case_root/bin"
+export TEST_CONFIG="$case_root/sysctl.conf" TEST_VALUE="$case_root/value"
+export TEST_CALLS="$case_root/calls" TEST_REBOOT="$case_root/reboot"
+# Only relocate the fixed system path. All control flow comes from the actual
+# migration, while sudo/sysctl/state are stubs that cannot touch this host.
+sed 's@^config=/etc/sysctl.d/99-omarchy-sysctl.conf$@config="$TEST_CONFIG"@' "$migration" >"$case_root/migration.sh"
+cat >"$case_root/bin/sysctl" <<'SH'
+#!/bin/bash
+printf 'sysctl %s\n' "$*" >>"$TEST_CALLS"
+if [[ $* == '-n dev.tty.ldisc_autoload' ]]; then
+  if [[ $TEST_MODE == read-error ]]; then echo read-error >&2; exit 1; fi
+  cat "$TEST_VALUE"
+elif [[ $1 == -p && $2 == "$TEST_CONFIG" && ${TEST_SUDO:-} == 1 ]]; then
+  if [[ $TEST_MODE == apply-error ]]; then echo apply-error >&2; exit 1; fi
+  if [[ $TEST_MODE != unchanged ]]; then printf '0\n' >"$TEST_VALUE"; fi
+else
+  echo unexpected-sysctl >&2
+  exit 99
+fi
+SH
+cat >"$case_root/bin/sudo" <<'SH'
+#!/bin/bash
+printf 'sudo %s\n' "$*" >>"$TEST_CALLS"
+[[ $1 == sysctl && $2 == -p && $3 == "$TEST_CONFIG" ]] || exit 99
+if [[ $TEST_MODE == sudo-error ]]; then echo sudo-error >&2; exit 1; fi
+export TEST_SUDO=1
+exec "$@"
+SH
+cat >"$case_root/bin/omarchy-state" <<'SH'
+#!/bin/bash
+[[ $* == 'set reboot-required' ]] || exit 99
+touch "$TEST_REBOOT"
+SH
+chmod +x "$case_root/bin/"*
 
-pass "migration reapplies the sysctl drop-in without waiting for reboot"
+run_case() {
+  local label=$1 contents=$2 value=$3 mode=$4 expected=$5 apply=$6 reboot=$7
+  printf '%s\n' "$contents" >"$TEST_CONFIG"
+  [[ $contents != missing ]] || rm "$TEST_CONFIG"
+  printf '%s\n' "$value" >"$TEST_VALUE"
+  : >"$TEST_CALLS"
+  rm -f "$TEST_REBOOT"
+  local status=0
+  TEST_MODE="$mode" PATH="$case_root/bin:$PATH" bash -euo pipefail "$case_root/migration.sh" >"$case_root/output" 2>&1 || status=$?
+  (( status == expected )) || fail "$label has the expected completion status" "$(cat "$case_root/output")"
+  if (( apply )); then
+    grep -Fq "sudo sysctl -p $TEST_CONFIG" "$TEST_CALLS" || fail "$label applies through sudo"
+  else
+    ! grep -q '^sudo ' "$TEST_CALLS" || fail "$label must not apply the drop-in"
+  fi
+  if (( reboot )); then
+    [[ -e $TEST_REBOOT ]] || fail "$label requests a reboot"
+  else
+    [[ ! -e $TEST_REBOOT ]] || fail "$label must not request a reboot"
+  fi
+  if [[ $mode == *-error ]]; then
+    grep -Fq "$mode" "$case_root/output" || fail "$label leaves diagnostics visible"
+  fi
+  pass "$label"
+}
+
+setting='dev.tty.ldisc_autoload=0'
+run_case 'already applied setting avoids sudo' "$setting" 0 normal 0 0 0
+run_case 'successful apply verifies the changed runtime value' "$setting" 1 normal 0 1 0
+run_case 'sudo failure stays pending and visible' "$setting" 1 sudo-error 1 1 1
+run_case 'apply failure stays pending and visible' "$setting" 1 apply-error 1 1 1
+run_case 'successful command with unchanged value stays pending' "$setting" 1 unchanged 1 1 1
+run_case 'unreadable runtime value stays pending' "$setting" 1 read-error 1 1 1
+run_case 'missing drop-in stays pending' missing 1 normal 1 0 0
+run_case 'edited drop-in without the key stays pending' 'vm.swappiness=100' 1 normal 1 0 0
+run_case 'runtime zero cannot hide a missing persisted setting' 'vm.swappiness=100' 0 normal 1 0 0
+run_case 'later conflicting assignment stays pending' "$setting"$'\ndev.tty.ldisc_autoload=1' 0 normal 1 0 0
+run_case 'commented setting is not persistent protection' "# $setting" 0 normal 1 0 0
+run_case 'whitespace and an inline comment are accepted' ' dev.tty.ldisc_autoload = 0 # hardened' 0 normal 0 0 0

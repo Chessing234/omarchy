@@ -1,13 +1,38 @@
 echo "Disable unprivileged TTY line-discipline autoload"
 
-# Package updates deliver etc/sysctl.d/99-omarchy-sysctl.conf with
-# dev.tty.ldisc_autoload=0, but existing boots keep the prior runtime value
-# until the next reboot unless we load the file now. Apply only our drop-in
-# so an unrelated invalid key elsewhere cannot fail the migration.
-if [[ $(sysctl -n dev.tty.ldisc_autoload 2>/dev/null) == "0" ]]; then
+config=/etc/sysctl.d/99-omarchy-sysctl.conf
+# Pacman preserves edited backup files. A successful sysctl -p of that old
+# file does not establish this setting, and rebooting cannot repair it either.
+if [[ ! -r $config ]] || ! awk -F= '
+  {
+    sub(/[;#].*$/, "")
+    key = $1
+    gsub(/^[[:space:]-]+|[[:space:]]+$/, "", key)
+    gsub(/\//, ".", key)
+    if (key == "dev.tty.ldisc_autoload") {
+      value = $2
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+      found = 1
+    }
+  }
+  END { exit !(found && value == "0") }
+' "$config"; then
+  echo "Missing dev.tty.ldisc_autoload=0 in $config; merge the package's .pacnew or repair the installed settings package, then retry." >&2
+  exit 1
+fi
+
+if [[ $(sysctl -n dev.tty.ldisc_autoload) == "0" ]]; then
   exit 0
 fi
 
-if [[ -r /etc/sysctl.d/99-omarchy-sysctl.conf ]]; then
-  sudo sysctl -p /etc/sysctl.d/99-omarchy-sysctl.conf >/dev/null || omarchy-state set reboot-required
+# Keep failures visible and the migration pending. A reboot is useful only
+# when the persisted setting is present, so request it after the check above.
+if ! sudo sysctl -p "$config" >/dev/null; then
+  omarchy-state set reboot-required
+  exit 1
+fi
+if [[ $(sysctl -n dev.tty.ldisc_autoload) != "0" ]]; then
+  echo "TTY line-discipline autoload is still enabled after applying $config; reboot and retry." >&2
+  omarchy-state set reboot-required
+  exit 1
 fi
