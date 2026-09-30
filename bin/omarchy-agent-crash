@@ -56,10 +56,6 @@ name=$comm
 name=${name##*/}
 [[ -n $name && $name != "-" && $name != "." && $name != ".." ]] || name=unknown
 
-state_dir="${XDG_RUNTIME_DIR:-/run/user/$UID}/omarchy/crash-diagnosis"
-# This throttle is optional; storage trouble must not prevent diagnosis.
-if mkdir -p "$state_dir" 2>/dev/null; then
-  { printf '%s\n' "$EPOCHSECONDS" >"$state_dir/$name"; } 2>/dev/null || true
-fi
-
-exec omarchy-agent --prompt "$prompt"
+# Run the session guard inside the terminal so its lifetime follows the agent,
+# rather than the detached terminal launcher.
+exec omarchy-launch-tui --app-id=org.omarchy.agent omarchy-agent-crash-session "$name" "$prompt"
