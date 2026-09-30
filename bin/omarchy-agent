@@ -136,6 +136,13 @@ pi)
   ;;
 esac
 
+# Opt-in user scripts under ~/.config/omarchy/hooks/agent-launch{,.d}/ see the
+# harness name and cwd before the process is replaced. Failures are logged by
+# omarchy-hook and never block the launch.
+if command -v omarchy-hook >/dev/null 2>&1; then
+  omarchy-hook agent-launch "$agent" "$PWD" || true
+fi
+
 if [[ $inline == "true" ]]; then
   exec "${command[@]}"
 else
