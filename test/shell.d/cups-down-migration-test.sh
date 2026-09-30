@@ -10,8 +10,16 @@ export CUPS_TEST_DIR="$test_tmp"
 
 cat >"$test_tmp/bin/lpstat" <<'SH'
 #!/bin/bash
-[[ $LC_MESSAGES == C && $LC_ALL == C ]] || exit 99
-echo 'lpstat: Scheduler is not running.' >&2
+if [[ ${CUPS_TEST_RESPONSE:-stopped} == empty ]]; then
+  if [[ $LC_MESSAGES == C && $LC_ALL == C && $LANGUAGE == C ]]; then
+    echo 'lpstat: No destinations added.' >&2
+  else
+    echo 'lpstat: Keine Ziele hinzugefügt.' >&2
+  fi
+else
+  [[ $LC_MESSAGES == C && $LC_ALL == C ]] || exit 99
+  echo 'lpstat: Scheduler is not running.' >&2
+fi
 exit 1
 SH
 cat >"$test_tmp/bin/systemctl" <<'SH'
@@ -75,3 +83,17 @@ run_case 'direct IPP queue permits removal' readable 'DeviceURI ipp://printer/' 
 run_case 'descriptive mention is not a discovery queue' readable $'Info implicitclass://example\nDeviceURI ipp://printer/' 0
 run_case 'unreadable saved queues keep the migration pending' denied 'DeviceURI implicitclass://printer/' 1
 run_case 'absent saved configuration permits removal' missing '' 0
+
+# Reproduce CUPS' own message-language selection without requiring a locale
+# package on the test host. The stub emits the translated empty-list response
+# unless the actual migration pins all three locale inputs for lpstat.
+rm -f "$test_tmp/dropped" "$test_tmp/marker" "$test_tmp/privileged-read"
+status=0
+CUPS_TEST_RESPONSE=empty CUPS_TEST_MODE=denied \
+  LC_ALL=C LC_MESSAGES=de_DE.UTF-8 LANGUAGE=de \
+  OMARCHY_CUPS_BROWSED_REMOVAL_MARKER="$test_tmp/marker" \
+  PATH="$test_tmp/bin:$PATH" bash -euo pipefail "$ROOT/migrations/1788009111.sh" >"$test_tmp/output" 2>&1 || status=$?
+(( status == 0 )) || fail "empty queues under a non-English locale permit removal" "$(/bin/cat "$test_tmp/output")"
+[[ -e $test_tmp/dropped && -e $test_tmp/marker ]] || fail "empty queues complete removal"
+[[ ! -e $test_tmp/privileged-read ]] || fail "healthy empty scheduler does not read saved queues"
+pass "empty queues under a non-English locale complete the migration"
