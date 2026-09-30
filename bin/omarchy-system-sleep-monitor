@@ -13,13 +13,15 @@ consume_sleep_events() {
   while IFS= read -r line; do
     if [[ $line == *"boolean ${wanted}"* ]]; then
       if [[ $wanted == "true" ]]; then
-        # Propagate lock failure so the inhibitor keeps the system awake.
+        # Report failure; a delay inhibitor cannot block suspend indefinitely.
         "$sleep_lock"
         return $?
       fi
       return 0
     fi
   done
+  # EOF is a broken event stream, not a successful sleep/resume event.
+  return 1
 }
 
 monitor_sleep_events() {
@@ -109,15 +111,15 @@ acquire_delay_inhibitor() {
 case ${1:-} in
   --consume)
     consume_sleep_events
-    exit 0
+    exit $?
     ;;
   --inhibited)
     monitor_sleep_events true
-    exit 0
+    exit $?
     ;;
   --wait-resume)
     monitor_sleep_events false
-    exit 0
+    exit $?
     ;;
 esac
 
@@ -139,15 +141,15 @@ while true; do
   if (( terminating )); then
     exit 0
   fi
-  wait_until_idle_awake
+  wait_until_idle_awake || exit 1
 
   if (( terminating )); then
     exit 0
   fi
-  acquire_delay_inhibitor
+  acquire_delay_inhibitor || exit 1
 
   if (( terminating )); then
     exit 0
   fi
-  wait_until_resume
+  wait_until_resume || exit 1
 done

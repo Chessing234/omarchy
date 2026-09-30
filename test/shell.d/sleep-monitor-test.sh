@@ -7,6 +7,7 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/base-test.sh"
 sleep_monitor="$ROOT/bin/omarchy-system-sleep-monitor"
 tmpdir=$(mktemp -d)
 monitor_pid=
+
 cleanup() {
   if [[ -n $monitor_pid ]]; then
     kill "$monitor_pid" 2>/dev/null || true
@@ -200,3 +201,42 @@ pass "sleep monitor re-takes the inhibitor after resume"
 kill "$monitor_pid"
 wait "$monitor_pid" 2>/dev/null || true
 monitor_pid=
+
+# EOF must not look like a successful event, or the parent spins instead of
+# allowing the service's RestartSec to pace a broken system bus.
+cat >"$mock_bin/dbus-monitor" <<'SH'
+#!/bin/bash
+echo stream >>"$INHIBIT_LOG"
+exit 1
+SH
+for mode in --consume --inhibited --wait-resume; do
+  if OMARCHY_PATH="$mock_omarchy" PATH="$mock_bin:$PATH" INHIBIT_LOG="$inhibit_log" \
+    bash "$sleep_monitor" "$mode" </dev/null >"$tmpdir/output" 2>&1; then
+    fail "$mode rejects EOF before the expected event"
+  fi
+done
+pass "all event-consuming modes reject a broken event stream"
+
+: >"$inhibit_log"
+status=0
+OMARCHY_PATH="$mock_omarchy" PATH="$mock_bin:$PATH" INHIBIT_LOG="$inhibit_log" \
+  timeout 2s bash "$sleep_monitor" >"$tmpdir/output" 2>&1 || status=$?
+(( status == 1 )) || fail "the parent exits on a broken event stream" "exit: $status"
+[[ $(grep -c '^inhibit$' "$inhibit_log") == 1 ]] || fail "a failed monitor is not retried in a busy loop"
+[[ $(grep -c '^stream$' "$inhibit_log") == 1 ]] || fail "only one failed stream is launched"
+pass "the parent exits after one stream failure for service restart pacing"
+
+cat >"$mock_bin/dbus-monitor" <<'SH'
+#!/bin/bash
+printf '   boolean true\n'
+exec sleep 30
+SH
+cat >"$mock_omarchy/bin/omarchy-system-sleep-lock" <<'SH'
+#!/bin/bash
+exit 17
+SH
+status=0
+OMARCHY_PATH="$mock_omarchy" PATH="$mock_bin:$PATH" \
+  bash "$sleep_monitor" --inhibited || status=$?
+(( status == 17 )) || fail "the inhibited child reports the lock helper failure" "exit: $status"
+pass "lock-helper failures propagate through the inhibited child"
