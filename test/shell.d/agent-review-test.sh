@@ -23,7 +23,9 @@ git init -q
 git config user.name test
 git config user.email test@example.invalid
 printf 'initial\n' > tracked
-git add tracked
+printf 'tracked diff=fixture\n' > .gitattributes
+git config diff.fixture.textconv external-diff
+git add tracked .gitattributes
 git commit -qm initial
 printf 'staged-change\n' >> tracked
 git add tracked
@@ -43,6 +45,7 @@ assert open(os.environ['REVIEW_CWD']).read().strip()==os.path.realpath('..')
 assert not os.path.exists(os.environ['MARKER'])
 PY
 pass 'staged review uses repository root and excludes unstaged and untracked content'
+git config --unset diff.external
 run
 python3 - <<'PY'
 import os
@@ -51,7 +54,7 @@ assert b'+unstaged-change' in args[1]
 assert b'+staged-change' not in args[1]
 assert not os.path.exists(os.environ['MARKER'])
 PY
-pass 'default review selects unstaged changes without executing an external diff'
+pass 'default review selects unstaged changes without executing a text converter'
 cd ..
 git add tracked
 rm -f "$CAPTURE"
