@@ -19,18 +19,16 @@ cmp -s "$TEST_CONTENT" "$TEST_TARGET" || fail "atomic replacement publishes comp
 pass "atomic replacement updates the symlink target with its original metadata"
 
 # Metadata must survive inode replacement, not just the content and mode.
-if python3 -c 'import os; assert hasattr(os, "setxattr")' >/dev/null 2>&1; then
-  python3 -c 'import os,sys; os.setxattr(sys.argv[1], "user.omarchy-test", b"keep")' "$TEST_TARGET"
+if python3 -c 'import os,sys; os.setxattr(sys.argv[1], "user.omarchy-test", b"keep")' "$TEST_TARGET" >/dev/null 2>&1; then
   bash "$ROOT/bin/omarchy-config-replace" "$TEST_CONTENT" "$case_root/config-link"
   python3 -c 'import os,sys; assert os.getxattr(sys.argv[1], "user.omarchy-test") == b"keep"' "$TEST_TARGET" || fail "extended attribute survives replacement"
   pass "atomic replacement retains extended attributes"
-elif command -v xattr >/dev/null; then
-  xattr -w user.omarchy-test keep "$TEST_TARGET"
+elif command -v xattr >/dev/null && xattr -w user.omarchy-test keep "$TEST_TARGET" 2>/dev/null; then
   bash "$ROOT/bin/omarchy-config-replace" "$TEST_CONTENT" "$case_root/config-link"
   [[ $(xattr -p user.omarchy-test "$TEST_TARGET") == keep ]] || fail "extended attribute survives replacement"
   pass "atomic replacement retains extended attributes"
 else
-  skip "extended attributes require Python xattr support or xattr utility"
+  printf 'ok - extended attributes unavailable on the test filesystem # SKIP\n'
 fi
 
 # Atomic publication needs a writable directory even if the file is writable.
@@ -45,7 +43,7 @@ if (( EUID != 0 )); then
   cmp -s "$TEST_TARGET" "$case_root/before" || fail "restricted directory preserves original content"
   pass "restricted directory refuses safely without truncating the live config"
 else
-  skip "restricted directory permission test requires a non-root user"
+  printf 'ok - restricted directory permission test requires a non-root user # SKIP\n'
 fi
 
 for failure in copy metadata rename; do
