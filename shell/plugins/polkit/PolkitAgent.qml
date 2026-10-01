@@ -154,7 +154,7 @@ Item {
     console.warn("omarchy polkit agent recreating after failed registration (attempt "
       + registerAttempts + "/" + maxRegisterAttempts + ")")
     agentLoader.active = false
-    Qt.callLater(function() { agentLoader.active = true })
+    agentReloadTimer.restart()
   }
 
   Timer {
@@ -181,6 +181,15 @@ Item {
     interval: 1500
     repeat: false
     onTriggered: root.recreateAgent()
+  }
+
+  // Quickshell binds one agent per process and the Loader frees the old one with
+  // deleteLater, which a pending Qt.callLater batch can overtake.
+  Timer {
+    id: agentReloadTimer
+    interval: 50
+    repeat: false
+    onTriggered: agentLoader.active = true
   }
 
   SequentialAnimation {
