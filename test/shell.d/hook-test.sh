@@ -77,6 +77,8 @@ chmod 700 "$hooks"
 if HOME="$home" "$ROOT/bin/omarchy-hook-install" post-update "$newline_hook" >"$tmpdir/out" 2>"$tmpdir/err"; then
   fail "hook-install rejects a file named ..<newline>"
 fi
+grep -Fq 'Invalid hook file name' "$tmpdir/err" ||
+  fail "hook-install reports an invalid file name for ..<newline>" "$(cat "$tmpdir/err")"
 [[ ! -e "$hooks/..
 " ]] || fail "hook-install copies nothing outside the type directory for ..<newline>"
 [[ $(stat -c %a "$hooks") == "700" ]] ||
