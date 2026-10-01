@@ -72,9 +72,14 @@ run_migration
 [[ $before == $(sha256sum "$config") ]] || fail "migration is idempotent" "$(cat "$config")"
 pass "migration is idempotent"
 
-# A config the migration cannot parse is left alone rather than truncated.
+# A config the migration cannot parse is left alone rather than truncated, and
+# the migration stays pending until it can finish.
 printf '{ not json' >"$config"
-run_migration
+status=0
+run_migration 2>/dev/null || status=$?
+
+((status != 0)) || fail "migration stays pending on an unparsable config"
+pass "migration stays pending on an unparsable config"
 
 [[ $(cat "$config") == '{ not json' ]] || fail "migration leaves an unparsable config untouched" "$(cat "$config")"
 pass "migration leaves an unparsable config untouched"
