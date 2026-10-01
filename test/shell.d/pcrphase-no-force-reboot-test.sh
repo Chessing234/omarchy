@@ -25,31 +25,16 @@ pass "PCR measurement units ship FailureAction=none drop-ins"
 
 migration="$ROOT/migrations/1789561000.sh"
 [[ -f $migration ]] || fail "migration that applies the drop-ins exists"
-grep -q 'FailureAction=none' "$migration" ||
-  fail "migration documents the FailureAction override"
-grep -q 'systemctl daemon-reload' "$migration" ||
-  fail "migration reloads systemd so the drop-ins apply without reboot"
-grep -q '10-omarchy-no-force-reboot.conf' "$migration" ||
-  fail "migration installs the shipped drop-in name"
 
-pass "migration installs drop-ins and daemon-reloads"
-
-# Exercise the migration against a fake systemd tree and a stub systemctl.
+# omarchy-settings installs the drop-ins; the migration only reloads systemd.
 test_tmp=$(mktemp -d)
 trap 'rm -rf "$test_tmp"' EXIT
-
-mkdir -p "$test_tmp/src/etc/systemd/system"
-for unit in "${units[@]}"; do
-  mkdir -p "$test_tmp/src/etc/systemd/system/${unit}.d"
-  cp "$ROOT/etc/systemd/system/${unit}.d/10-omarchy-no-force-reboot.conf" \
-    "$test_tmp/src/etc/systemd/system/${unit}.d/"
-done
 
 mkdir -p "$test_tmp/bin"
 cat >"$test_tmp/bin/systemctl" <<'STUB'
 #!/bin/bash
 printf '%s\n' "$*" >>"$TEST_TMP/systemctl.log"
-exit 0
+exit "${SYSTEMCTL_STATUS:-0}"
 STUB
 cat >"$test_tmp/bin/sudo" <<'STUB'
 #!/bin/bash
@@ -61,22 +46,18 @@ printf '%s\n' "$*" >>"$TEST_TMP/state.log"
 STUB
 chmod +x "$test_tmp/bin"/*
 
-PATH="$test_tmp/bin:$PATH" \
-  OMARCHY_PATH="$test_tmp/src" \
-  OMARCHY_SYSTEMD_SYSTEM_DIR="$test_tmp/etc/systemd/system" \
-  TEST_TMP="$test_tmp" \
-  bash "$migration"
-
-for unit in "${units[@]}"; do
-  drop_in="$test_tmp/etc/systemd/system/${unit}.d/10-omarchy-no-force-reboot.conf"
-  [[ -f $drop_in ]] || fail "migration installs drop-in for $unit into empty /etc"
-  grep -qxF 'FailureAction=none' "$drop_in" ||
-    fail "installed drop-in for $unit has FailureAction=none"
-done
+PATH="$test_tmp/bin:$PATH" TEST_TMP="$test_tmp" bash -euo pipefail "$migration" >/dev/null
 
 grep -qxF 'daemon-reload' "$test_tmp/systemctl.log" ||
   fail "migration runs systemctl daemon-reload"
 [[ ! -e $test_tmp/state.log ]] ||
   fail "successful reload does not set reboot-required"
 
-pass "migration installs missing drop-ins and reloads systemd"
+pass "migration reloads systemd so the drop-ins apply without reboot"
+
+PATH="$test_tmp/bin:$PATH" TEST_TMP="$test_tmp" SYSTEMCTL_STATUS=1 bash -euo pipefail "$migration" >/dev/null
+
+grep -qxF 'set reboot-required' "$test_tmp/state.log" ||
+  fail "failed reload asks for a reboot"
+
+pass "migration asks for a reboot when systemd cannot reload"
