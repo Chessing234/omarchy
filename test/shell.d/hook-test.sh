@@ -66,4 +66,19 @@ if HOME="$home" "$ROOT/bin/omarchy-hook-install" post-update "$tmpdir/as-dot/." 
 fi
 grep -Fq 'Invalid hook file name' "$tmpdir/err" ||
   fail "hook-install reports an invalid file name for ." "$(cat "$tmpdir/err")"
+
+# A regular file named `..<newline>` passes the -f check, and $(basename) strips
+# the newline, so its name alone would point cp and chmod at the hooks directory.
+mkdir -p "$tmpdir/newline"
+newline_hook="$tmpdir/newline/..
+"
+printf 'echo escaped\n' >"$newline_hook"
+chmod 700 "$hooks"
+if HOME="$home" "$ROOT/bin/omarchy-hook-install" post-update "$newline_hook" >"$tmpdir/out" 2>"$tmpdir/err"; then
+  fail "hook-install rejects a file named ..<newline>"
+fi
+[[ ! -e "$hooks/..
+" ]] || fail "hook-install copies nothing outside the type directory for ..<newline>"
+[[ $(stat -c %a "$hooks") == "700" ]] ||
+  fail "hook-install leaves the hooks directory mode alone for ..<newline>"
 pass "hook-install rejects file basenames that escape the type directory"
