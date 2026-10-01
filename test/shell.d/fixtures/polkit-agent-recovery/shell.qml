@@ -7,6 +7,7 @@ ShellRoot {
   readonly property string resultPath: Quickshell.env("OMARCHY_QML_TEST_RESULT")
   readonly property string rootPath: Quickshell.env("OMARCHY_PATH")
   property var agent: null
+  property bool loaded: false
   property string error: ""
 
   function shellQuote(value) {
@@ -14,7 +15,7 @@ ShellRoot {
   }
 
   function writeResult() {
-    var payload = JSON.stringify({ loaded: agent !== null, error: error })
+    var payload = JSON.stringify({ loaded: loaded, error: error })
     if (resultPath) {
       Quickshell.execDetached(["bash", "-lc", "printf '%s' " + shellQuote(payload) + " > " + shellQuote(resultPath)])
     }
@@ -34,6 +35,7 @@ ShellRoot {
         return
       }
       root.agent = component.createObject(host)
+      root.loaded = root.agent !== null
       recreate.start()
     }
   }
@@ -55,6 +57,11 @@ ShellRoot {
     id: finish
     interval: 500
     repeat: false
-    onTriggered: root.writeResult()
+    // Its own startup poll would retry about 4s in; stop it so the log the
+    // harness counts holds only the attempts made so far.
+    onTriggered: {
+      root.agent.destroy()
+      root.writeResult()
+    }
   }
 }
