@@ -5,9 +5,9 @@
 
 set -euo pipefail
 
-# Authenticate before any teardown. Ctrl+C at the password prompt is PAM
-# exit 1, not 130; map it so the presentation wrapper does not show Done.
-if ! sudo -v; then
+# Authenticate before any teardown, with a command: sudo -v prompts even under passwordless sudo.
+# Ctrl+C at the password prompt is PAM exit 1, not 130; map it so the presentation wrapper does not show Done.
+if ! sudo true; then
   exit 130
 fi
 
