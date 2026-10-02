@@ -32,6 +32,7 @@ EOF
 cat >"$mock_path/omarchy-plugin-disable" <<'EOF'
 #!/bin/bash
 printf 'plugin-disable %s\n' "$*" >>"$TEST_TMP/calls"
+[[ ${PLUGIN_FAIL:-} != 1 ]]
 EOF
 
 cat >"$mock_path/omarchy-webapp-remove" <<'EOF'
@@ -69,3 +70,9 @@ expected=$'sudo true\ntailscale down\nsystemctl --user disable --now omarchy-tai
 [[ $(<"$test_tmp/calls") == "$expected" ]] || fail "authenticated sudo tears Tailscale down in order" "$(<"$test_tmp/calls")"
 grep -qx 'Tailscale has been removed.' "$test_tmp/out" || fail "authenticated sudo reports Tailscale was removed" "$(<"$test_tmp/out")"
 pass "authenticated sudo removes Tailscale"
+
+status=0
+PLUGIN_FAIL=1 run_remove || status=$?
+(( status == 0 )) || fail "plugin disable failure still removes Tailscale" "status=$status"
+[[ $(<"$test_tmp/calls") == "$expected" ]] || fail "plugin disable failure does not stop the teardown" "$(<"$test_tmp/calls")"
+pass "plugin disable failure does not strand a half-removed Tailscale"
