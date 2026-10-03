@@ -105,4 +105,5 @@ assert(/IpcHandler[\s\S]*?function togglePercentage\(\) \{ root\.togglePercentag
 assert(/manageIpc: false/.test(panelSource), 'power owns its IPC handler so it can extend the target methods')
 assert(/PendingDischarge: UPowerDeviceState\.PendingDischarge/.test(panelSource), 'power maps PendingDischarge UPower state')
 assert(/Model\.batteryIcon\(device,\s*root\.discharging,\s*upowerStates\(\),\s*root\.activeProfile,\s*root\.batteryInfo\.threshold\)/.test(panelSource), 'power passes active profile and threshold to batteryIcon')
+assert(/hasModifier:.*hasProfileModifier.*chargeThresholdActive/.test(panelSource), 'power includes charge threshold in modifier check')
 JS
