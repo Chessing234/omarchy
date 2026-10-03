@@ -107,4 +107,5 @@ assert(/PendingDischarge: UPowerDeviceState\.PendingDischarge/.test(panelSource)
 assert(/Model\.batteryIcon\(device,\s*root\.discharging,\s*upowerStates\(\),\s*root\.activeProfile,\s*root\.batteryInfo\.threshold\)/.test(panelSource), 'power passes active profile and threshold to batteryIcon')
 assert(/hasModifier:.*hasProfileModifier.*chargeThresholdActive/.test(panelSource), 'power includes charge threshold in modifier check')
 assert(/Timer[\s\S]*?15000[\s\S]*?!root\.discharging && !batteryProc\.running/.test(panelSource), 'power polls battery status on AC while closed')
+assertEqual((panelSource.match(/\{/g) || []).length, (panelSource.match(/\}/g) || []).length, 'power Panel.qml braces are balanced')
 JS
