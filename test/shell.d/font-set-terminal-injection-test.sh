@@ -21,10 +21,11 @@ cat >"$mock_bin/fc-list" <<'SH'
 printf '%s\n' "CaskaydiaMono Nerd Font" "Test Font" 'Evil"; command = "id' 'Foo$HOME'
 printf 'Two\nFamily\n'
 SH
-for stub in omarchy-restart-shell omarchy-cmd-present omarchy-hook omarchy-notification-send pkill pgrep; do
-  printf '#!/bin/bash\nexit 1\n' >"$mock_bin/$stub"
-  chmod +x "$mock_bin/$stub"
+for stub in omarchy-restart-shell omarchy-hook omarchy-notification-send pkill; do
+  printf '#!/bin/bash\nexit 0\n' >"$mock_bin/$stub"
 done
+# No terminal is running, so font-set sends no restart notification
+printf '#!/bin/bash\nexit 1\n' >"$mock_bin/pgrep"
 # cmd-present kitty should be false so we only rewrite existing kitty.conf
 cat >"$mock_bin/omarchy-cmd-present" <<'SH'
 #!/bin/bash
@@ -61,7 +62,9 @@ grep -Fq 'font=CaskaydiaMono Nerd Font:size=9' "$test_home/.config/foot/foot.ini
   fail "font-set rewrites the Foot font" "$(cat "$test_home/.config/foot/foot.ini")"
 grep -Fxq 'font_family CaskaydiaMono Nerd Font' "$test_home/.config/kitty/kitty.conf" ||
   fail "font-set rewrites the Kitty family" "$(cat "$test_home/.config/kitty/kitty.conf")"
-pass "font-set writes a normal family into terminal configs"
+grep -Fq '<string>CaskaydiaMono Nerd Font</string>' "$test_home/.config/fontconfig/fonts.conf" ||
+  fail "font-set writes the family into fonts.conf" "$(cat "$test_home/.config/fontconfig/fonts.conf")"
+pass "font-set writes a normal family into terminal configs and fonts.conf"
 
 if run_font_set 'Evil"; command = "id' 2>"$test_tmp/err"; then
   fail "font-set refuses a family name that would close a TOML string"
