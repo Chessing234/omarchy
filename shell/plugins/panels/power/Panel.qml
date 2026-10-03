@@ -240,8 +240,7 @@ Panel {
     repeat: true
     onTriggered: {
       if (!profilesProc.running) profilesProc.running = true
-      if (!batteryProc.running) batteryProc.running = true
-    }
+      if (!root.discharging && !batteryProc.running) batteryProc.running = true
   }
 
   // Rotate the status phrase while the panel is open and we're in a
