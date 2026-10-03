@@ -234,7 +234,15 @@ Panel {
   }
 
   Timer { interval: 5000; running: root.opened; repeat: true; onTriggered: root.refresh() }
-  Timer { interval: 15000; running: !root.opened && root.batteryPresent; repeat: true; onTriggered: if (!profilesProc.running) profilesProc.running = true }
+  Timer {
+    interval: 15000
+    running: !root.opened && root.batteryPresent
+    repeat: true
+    onTriggered: {
+      if (!profilesProc.running) profilesProc.running = true
+      if (!batteryProc.running) batteryProc.running = true
+    }
+  }
 
   // Rotate the status phrase while the panel is open and we're in a
   // rotating state (charging or on battery). The text swap is wrapped in a
