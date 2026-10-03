@@ -86,15 +86,20 @@ grep -Fq 'preauth' "$migration" && grep -Fq 'silent' "$migration" ||
   fail "migration mentions the silent preauth token"
 pass "migration targets the silent preauth on system-auth"
 
-# The upgrade can run after the migration. Exercise its actual system-auth
-# transforms against the repaired fixture so it cannot reintroduce silent.
+# The upgrade can run before or after the migration. Exercise its actual
+# system-auth transforms on both so it neither keeps nor restores silent.
 grep -F 'as_root sed -i' "$ROOT/bin/omarchy-upgrade-to-quattro" |
   grep -F '/etc/pam.d/system-auth' >"$tmpdir/upgrade.sh"
 [[ -s $tmpdir/upgrade.sh ]] || fail "upgrade system-auth transforms were found"
 sed -i "s|/etc/pam.d/system-auth|$pam|g; s/as_root sed/sudo sed/g" "$tmpdir/upgrade.sh"
-PATH="$tmpdir/bin:$PATH" bash -euo pipefail "$tmpdir/upgrade.sh"
-grep -Eq 'pam_faillock\.so preauth deny=10 unlock_time=120' "$pam" ||
-  fail "upgrade preserves visible system-auth lockout" "$(cat "$pam")"
-! grep -Eq 'preauth[[:space:]]+silent' "$pam" ||
-  fail "upgrade must not restore silent after migration" "$(cat "$pam")"
-pass "upgrade preserves the migration's lockout visibility"
+for state in repaired original; do
+  if [[ $state == "original" ]]; then
+    cp "$tmpdir/original-pam" "$pam"
+  fi
+  PATH="$tmpdir/bin:$PATH" bash -euo pipefail "$tmpdir/upgrade.sh"
+  grep -Eq 'pam_faillock\.so preauth deny=10 unlock_time=120' "$pam" ||
+    fail "upgrade leaves a visible lockout on the $state system-auth" "$(cat "$pam")"
+  ! grep -Eq 'preauth[[:space:]]+silent' "$pam" ||
+    fail "upgrade leaves no silent preauth on the $state system-auth" "$(cat "$pam")"
+done
+pass "upgrade makes and keeps the lockout visible"
