@@ -161,7 +161,7 @@ if [[ -f /usr/bin/true && -x /usr/bin/true && ! -O /usr/bin/true ]]; then
     fail "another owner's executable must not claim the request"
   pass "another owner's executable is ignored"
 else
-  printf 'ok - other-owner executable # SKIP no different-owner fixture available\n'
+  skip "other-owner executable: no different-owner fixture available"
 fi
 
 # Disabling a broken dispatcher restores normal launches without retrying it.
