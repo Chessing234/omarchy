@@ -23,6 +23,13 @@ cat >"$mock_bin/pi" <<'SH'
 #!/bin/bash
 printf 'started\n' >>"$OMARCHY_TEST_HARNESS_LOG"
 SH
+export OMARCHY_TEST_HOOK_DIAGNOSTICS="$test_tmp/diagnostics"
+cat >"$mock_bin/logger" <<'SH'
+#!/bin/bash
+[[ $* == "--tag omarchy-agent-hook" ]] || exit 1
+cat >>"$OMARCHY_TEST_HOOK_DIAGNOSTICS"
+SH
+chmod +x "$mock_bin/logger"
 chmod +x "$mock_bin/omarchy-cmd-missing" "$mock_bin/pi"
 
 cat >"$test_home/.config/omarchy/hooks/agent-launch" <<'SH'
@@ -52,7 +59,9 @@ HOME="$test_home" PATH="$mock_bin:$ROOT/bin:$PATH" OMARCHY_TEST_HARNESS_LOG="$ha
 if [[ $(cat "$harness_log") != "started" ]]; then
   fail "a failing agent-launch hook must still execute the harness"
 fi
-pass "a failing agent-launch hook does not block the harness"
+grep -q 'Hook failed:' "$OMARCHY_TEST_HOOK_DIAGNOSTICS" ||
+  fail "hook failure diagnostics must reach the journal"
+pass "a failing agent-launch hook logs its failure and does not block the harness"
 
 # A notification hook must not consume the inline harness input or print into it.
 cat >"$test_home/.config/omarchy/hooks/agent-launch" <<'SH'
@@ -69,6 +78,9 @@ chmod +x "$mock_bin/pi" "$test_home/.config/omarchy/hooks/agent-launch"
 printf 'terminal input' | HOME="$test_home" PATH="$mock_bin:$ROOT/bin:$PATH"   OMARCHY_TEST_HOOK_LOG="$hook_log" OMARCHY_TEST_HARNESS_LOG="$harness_log"   "$ROOT/bin/omarchy-agent" --inline >"$test_tmp/output" 2>&1
 [[ ! -s $hook_log && ! -s $test_tmp/output && $(cat "$harness_log") == "terminal input" ]] ||
   fail "notification hook must not consume terminal input or emit terminal output"
+grep -qx 'hook stdout' "$OMARCHY_TEST_HOOK_DIAGNOSTICS" &&
+  grep -qx 'hook stderr' "$OMARCHY_TEST_HOOK_DIAGNOSTICS" ||
+  fail "hook output must reach the journal instead of the terminal"
 pass "hook IO is isolated from the inline harness"
 
 # Use the real timeout; a hook ignoring TERM is still bounded by kill-after.
@@ -83,4 +95,6 @@ printf 'after timeout' | HOME="$test_home" PATH="$mock_bin:$ROOT/bin:$PATH"   OM
 elapsed=$((SECONDS - start))
 (( elapsed >= 5 && elapsed < 12 )) && [[ ! -s $test_tmp/output && $(cat "$harness_log") == "after timeout" ]] ||
   fail "slow notification hook must be terminated before the harness starts" "$elapsed seconds"
+grep -q 'agent-launch hook failed or timed out (status ' "$OMARCHY_TEST_HOOK_DIAGNOSTICS" ||
+  fail "a hook deadline must leave a journal diagnostic"
 pass "a hook ignoring TERM cannot block the launch indefinitely"
