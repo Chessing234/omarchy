@@ -12,20 +12,9 @@ migration="$ROOT/migrations/1789261001.sh"
 grep -A30 'setup_pam_with_fprintd\|fprintd_gate\|pam.d/sudo' "$setup" | grep -Fq 'omarchy-hw-laptop-open' ||
   fail "fingerprint setup still gates sudo/polkit with omarchy-hw-laptop-open"
 
-python3 - "$setup" <<'PY' || fail "setup_lock_fingerprint_pam must not write a lid gate"
-import pathlib, sys
-text = pathlib.Path(sys.argv[1]).read_text()
-start = text.find("setup_lock_fingerprint_pam()")
-if start < 0:
-    raise SystemExit("setup_lock_fingerprint_pam missing")
-# Next top-level function or end of interesting block
-body = text[start : start + 800]
-if "omarchy-hw-laptop-open" in body:
-    raise SystemExit("lock setup still references omarchy-hw-laptop-open")
-if "pam_fprintd.so" not in body:
-    raise SystemExit("lock setup must still write pam_fprintd")
-PY
-pass "setup writes ungated lock fingerprint PAM"
+grep -Fq '"$OMARCHY_PATH/bin/omarchy-apply-lock"' "$setup" ||
+  fail "fingerprint setup delegates lock PAM to apply-lock"
+pass "setup delegates ungated lock fingerprint PAM to apply-lock"
 
 python3 - "$apply" <<'PY' || fail "apply-lock must not gate omarchy-lock-fingerprint"
 import pathlib, sys
