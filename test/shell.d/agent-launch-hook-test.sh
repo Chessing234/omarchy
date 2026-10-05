@@ -59,7 +59,7 @@ HOME="$test_home" PATH="$mock_bin:$ROOT/bin:$PATH" OMARCHY_TEST_HARNESS_LOG="$ha
 if [[ $(cat "$harness_log") != "started" ]]; then
   fail "a failing agent-launch hook must still execute the harness"
 fi
-grep -q 'Hook failed:' "$OMARCHY_TEST_HOOK_DIAGNOSTICS" ||
+grep -q 'agent-launch hook failed or timed out (status 1)'  "$OMARCHY_TEST_HOOK_DIAGNOSTICS" ||
   fail "hook failure diagnostics must reach the journal"
 pass "a failing agent-launch hook logs its failure and does not block the harness"
 
@@ -75,12 +75,11 @@ cat >"$mock_bin/pi" <<'SH'
 cat >"$OMARCHY_TEST_HARNESS_LOG"
 SH
 chmod +x "$mock_bin/pi" "$test_home/.config/omarchy/hooks/agent-launch"
+: >"$OMARCHY_TEST_HOOK_DIAGNOSTICS"
 printf 'terminal input' | HOME="$test_home" PATH="$mock_bin:$ROOT/bin:$PATH"   OMARCHY_TEST_HOOK_LOG="$hook_log" OMARCHY_TEST_HARNESS_LOG="$harness_log"   "$ROOT/bin/omarchy-agent" --inline >"$test_tmp/output" 2>&1
 [[ ! -s $hook_log && ! -s $test_tmp/output && $(cat "$harness_log") == "terminal input" ]] ||
   fail "notification hook must not consume terminal input or emit terminal output"
-grep -qx 'hook stdout' "$OMARCHY_TEST_HOOK_DIAGNOSTICS" &&
-  grep -qx 'hook stderr' "$OMARCHY_TEST_HOOK_DIAGNOSTICS" ||
-  fail "hook output must reach the journal instead of the terminal"
+[[ ! -s $OMARCHY_TEST_HOOK_DIAGNOSTICS ]] || fail "successful hook output must be discarded"
 pass "hook IO is isolated from the inline harness"
 
 # Use the real timeout; a hook ignoring TERM is still bounded by kill-after.
@@ -155,3 +154,21 @@ HOME="$test_home" PATH="$mock_bin:$ROOT/bin:$PATH" \
   "$ROOT/bin/omarchy-agent" --inline
 [[ $(wc -c <"$hook_log") -eq 100000 ]] || fail "hook files must not inherit the diagnostic size limit"
 pass "hooks can write files larger than the diagnostic snapshot"
+
+# A returned hook's background child may safely keep its inherited output.
+cat >"$test_home/.config/omarchy/hooks/agent-launch" <<'SH'
+#!/bin/bash
+(
+  sleep 0.5
+  echo 'background output'
+  echo 'background error' >&2
+  printf finished >"$OMARCHY_TEST_HOOK_LOG"
+) &
+SH
+: >"$hook_log"
+HOME="$test_home" PATH="$mock_bin:$ROOT/bin:$PATH" \
+  OMARCHY_TEST_HOOK_LOG="$hook_log" OMARCHY_TEST_HARNESS_LOG="$harness_log" \
+  "$ROOT/bin/omarchy-agent" --inline
+sleep 1
+[[ $(cat "$hook_log") == finished ]] || fail "background output must not terminate the child with SIGPIPE"
+pass "returned hook background work keeps safe output descriptors"
