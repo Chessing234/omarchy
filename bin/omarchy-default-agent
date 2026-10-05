@@ -74,11 +74,16 @@ else
   managed_wrapper() {
     local wrapper="$HOME/.local/bin/$agent"
     grep -Eq '^mise use -g|^# omarchy:mise-managed=true$' "$wrapper" && return 0
-    # Recognize the exact two-line read-only template written before the marker
-    # was added, while leaving wrappers with user setup outside that template.
-    [[ $(head -n 1 "$wrapper") == '#!/bin/bash' ]] &&
-      (( $(wc -l <"$wrapper") == 2 )) &&
-      grep -Eq '^exec mise x .+ -- .+ "\$@"$' "$wrapper"
+    # Recognize the exact old template only for this agent's own package and
+    # executable; a user's two-line wrapper can deliberately run another tool.
+    local package_arg bin_arg text
+    printf -v package_arg '%q' "$agent_package"
+    printf -v bin_arg '%q' "$agent"
+    text=$(cat "$wrapper")
+    (( $(wc -l <"$wrapper") == 2 )) &&
+      { [[ $text == $'#!/bin/bash\nexec mise x '"\"$agent_package\" -- \"$agent\" \"\$@\"" ]] ||
+        [[ $text == $'#!/bin/bash\nexec mise x '"$package_arg -- $bin_arg \"\$@\"" ]]; }
+
   }
   user_install() {
     [[ -x $HOME/.local/bin/$agent ]] &&

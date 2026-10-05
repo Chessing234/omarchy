@@ -36,6 +36,12 @@ printf '#!/bin/bash\nexec mise x "codex" -- "codex" "$@"\n' >"$HOME/.local/bin/c
 : >"$TEST_LOG"
 omarchy-default-agent codex
 grep -Fx 'where codex' "$TEST_LOG" >/dev/null || fail "legacy read-only wrappers must probe their package"
+# A user's canonical-looking wrapper for another package must stay theirs.
+printf '#!/bin/bash\nexec mise x "custom-codex" -- "custom-agent" "$@"\n' >"$HOME/.local/bin/codex"
+: >"$TEST_LOG"
+omarchy-default-agent codex
+if grep -E '^(where|use) ' "$TEST_LOG" >/dev/null; then fail "foreign two-line launchers must not trigger mise installation"; fi
+printf '#!/bin/bash\nexec mise x "codex" -- "codex" "$@"\n' >"$HOME/.local/bin/codex"
 omarchy-default-agent --install codex
 grep -Fx 'use -g codex' "$TEST_LOG" >/dev/null || fail "managed agent selection must restore the package pin"
 [[ $(cat "$HOME/.config/omarchy/defaults/agent") == codex ]] || fail "successful installation must set the default"
