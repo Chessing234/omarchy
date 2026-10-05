@@ -5,12 +5,8 @@
 
 set -e
 
-if omarchy-openclaw-present; then
-  echo "OpenClaw is already available; skipping the package install."
-else
-  echo "Installing OpenClaw..."
-  omarchy-pkg-add openclaw
-fi
+# The same self-updating install the default agent gets.
+omarchy-install-openclaw-cli --now
 
 # The desktop app is OpenClaw's Control UI: a web app served by its own
 # gateway. The launcher entry goes through omarchy-launch-openclaw, which
@@ -18,7 +14,7 @@ fi
 # inside the package, so nothing is fetched here.
 echo "Installing the OpenClaw web app..."
 omarchy-webapp-install OpenClaw "http://127.0.0.1:18789" \
-  /usr/lib/node_modules/openclaw/dist/control-ui/apple-touch-icon.png \
+  /usr/share/openclaw/openclaw.png \
   omarchy-launch-openclaw
 
 # A first install runs onboarding right here: launching the app instead would

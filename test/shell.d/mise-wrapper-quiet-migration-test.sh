@@ -10,13 +10,18 @@ trap 'rm -rf "$test_dir"' EXIT
 
 home="$test_dir/home"
 bin_dir="$home/.local/bin"
-mkdir -p "$bin_dir"
+mkdir -p "$bin_dir" "$test_dir/bin"
+cat >"$test_dir/bin/mise" <<'SH'
+#!/bin/bash
+exit 0
+SH
+chmod +x "$test_dir/bin/mise"
 
 # The migration calls omarchy-mise-install to rewrite a wrapper, so the real
 # one has to be reachable: this proves the template it writes today, not a
 # copy of it that could drift.
 run_migration() {
-  HOME="$home" PATH="$ROOT/bin:$PATH" bash -euo pipefail "$migration" >/dev/null
+  HOME="$home" PATH="$test_dir/bin:$ROOT/bin:$PATH" bash -euo pipefail "$migration" >/dev/null
 }
 
 write_stale_wrapper() {
@@ -153,6 +158,6 @@ pass "migration only rewrites wrappers it recognizes"
 # A machine with no ~/.local/bin at all must not fail the run.
 empty_home="$test_dir/empty-home"
 mkdir -p "$empty_home"
-HOME="$empty_home" PATH="$ROOT/bin:$PATH" bash -euo pipefail "$migration" >/dev/null ||
+HOME="$empty_home" PATH="$test_dir/bin:$ROOT/bin:$PATH" bash -euo pipefail "$migration" >/dev/null ||
   fail "migration succeeds when ~/.local/bin is missing"
 pass "migration succeeds when ~/.local/bin is missing"
