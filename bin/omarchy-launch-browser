@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-default_browser=$(omarchy-cmd-default-browser)
+default_browser=$(omarchy-cmd-default-browser || true)
 
 if [[ $default_browser != *.desktop || $default_browser == */* || $default_browser == *..* ]]; then
   default_browser=chromium.desktop
@@ -26,7 +26,7 @@ if [[ -z $browser_exec ]]; then
   exit 1
 fi
 
-if "$browser_exec" --help 2>/dev/null | grep -q MOZ_LOG; then
+if "$browser_exec" --help 2>/dev/null | grep MOZ_LOG >/dev/null; then
   private_flag="--private-window"
 elif [[ $browser_exec =~ edge ]]; then
   private_flag="--inprivate"

@@ -40,7 +40,7 @@ for flag in "$@"; do
   fi
 done
 
-browser=$(omarchy-cmd-default-browser)
+browser=$(omarchy-cmd-default-browser || true)
 
 case $browser in
 google-chrome* | brave* | microsoft-edge* | opera* | vivaldi* | helium*) ;;

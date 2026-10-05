@@ -75,3 +75,14 @@ grep -Fq -- "--proto-redir '=https,http'" "$install" || fail "webapp icon fetch 
 grep -Fq 'file:* | javascript:* | data:*' "$install" || fail "webapp icon discovery drops non-http hrefs"
 pass "webapp install does not follow icon URLs off http(s)"
 
+
+rm "$mock_bin/omarchy-cmd-default-browser"
+cat >"$mock_bin/omarchy-cmd-default-browser" <<'SH'
+#!/bin/bash
+exit 1
+SH
+HOME="$test_home" PATH="$mock_bin:$PATH" OMARCHY_TEST_WEBAPP_LAUNCH="$launch_log" \
+  bash "$ROOT/bin/omarchy-launch-webapp" "https://example.test/no-default"
+grep -F -- 'chromium --app=https://example.test/no-default' "$launch_log" >/dev/null ||
+  fail "webapp launcher falls back to installed Chromium with no default"
+pass "webapp launcher uses Chromium when no default browser is configured"
