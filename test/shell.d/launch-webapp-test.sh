@@ -81,6 +81,7 @@ cat >"$mock_bin/omarchy-cmd-default-browser" <<'SH'
 #!/bin/bash
 exit 1
 SH
+chmod +x "$mock_bin/omarchy-cmd-default-browser"
 HOME="$test_home" PATH="$mock_bin:$PATH" OMARCHY_TEST_WEBAPP_LAUNCH="$launch_log" \
   bash "$ROOT/bin/omarchy-launch-webapp" "https://example.test/no-default"
 grep -F -- 'chromium --app=https://example.test/no-default' "$launch_log" >/dev/null ||
