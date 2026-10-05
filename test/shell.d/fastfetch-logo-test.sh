@@ -97,11 +97,11 @@ tight=$(run_logo 80 24)
 [[ $tight == *"██████████████"* && $tight != *"▄█████▄"* ]] || fail "an 80-column terminal gets the compact O" "$tight"
 pass "an 80-column terminal gets the compact O"
 
-# Smaller than the small mark still prints it rather than falling through to a
-# builtin arch logo — the thing the issue must not become.
+# Hide the logo when none fits beside the actual module box.
 narrow=$(run_logo 40 12)
-[[ -n $narrow && $narrow == "$tight" ]] || fail "a terminal too small for any mark still prints the compact O" "$narrow"
-pass "a terminal too small for any mark still prints the compact O"
+[[ -z $narrow ]] || fail "a terminal too small for any mark suppresses the logo" "$narrow"
+[[ $(COLUMNS=64 LINES=24 omarchy-fastfetch-logo --path) == "$ROOT/default/fastfetch/logo-none.txt" ]] || fail "narrow file selection must suppress the logo"
+pass "a terminal too small for any mark suppresses the logo"
 
 # Packaged installs only ship share trees under /usr/share/omarchy (no etc/).
 packaged_root=$(mktemp -d)
@@ -110,6 +110,7 @@ mkdir -p "$packaged_root/default/fastfetch"
 cp "$full" "$packaged_root/logo.txt"
 cp "$compact" "$packaged_root/default/fastfetch/logo.txt"
 cp "$small" "$packaged_root/default/fastfetch/logo-small.txt"
+cp "$ROOT/default/fastfetch/logo-none.txt" "$packaged_root/default/fastfetch/logo-none.txt"
 packaged_tight=$(OMARCHY_PATH="$packaged_root" COLUMNS=80 LINES=24 omarchy-fastfetch-logo)
 [[ $packaged_tight == "$tight" ]] ||
   fail "a packaged layout still picks the compact O at 80 columns" "$packaged_tight"

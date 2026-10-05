@@ -66,11 +66,8 @@ variants=(
 )
 
 chosen=""
-fallback=""
 for file in "${variants[@]}"; do
   [[ -f $file ]] || continue
-  # The list is largest to smallest; retain the smallest existing fallback.
-  fallback=$file
   w=$(logo_width "$file")
   h=$(logo_height "$file")
   if (( w <= max_w && h <= max_h )); then
@@ -78,9 +75,10 @@ for file in "${variants[@]}"; do
     break
   fi
 done
-# variants are largest→smallest; if none fit, use the last existing file found.
-[[ -n $chosen ]] || chosen=$fallback
-[[ -n $chosen ]] || exit 1
+# A newline-only file suppresses the mark when none fits. A zero-byte file
+# makes Fastfetch fall back to its built-in OS logo, which also overflows.
+[[ -n $chosen ]] || chosen="$omarchy_path/default/fastfetch/logo-none.txt"
+[[ -f $chosen ]] || exit 1
 
 print_logo() {
   local file=$1 line

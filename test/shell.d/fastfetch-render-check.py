@@ -18,13 +18,14 @@ if not binary:
     sys.exit('fastfetch is required for the native logo rendering check')
 config = json.loads((root / 'etc/fastfetch/config.jsonc').read_text())
 # Isolate logo rendering from unrelated host-information modules and their ANSI.
+production_modules = config['modules']
 config['modules'] = [{'type': 'custom', 'format': 'TEST MODULE'}]
 results = []
 with tempfile.TemporaryDirectory(prefix='fastfetch paths ') as directory:
     packaged = Path(directory)
     config_path = packaged / 'native-config.json'
     config_path.write_text(json.dumps(config))
-    for name in ['logo.txt', 'default/fastfetch/logo.txt', 'default/fastfetch/logo-small.txt']:
+    for name in ['logo.txt', 'default/fastfetch/logo.txt', 'default/fastfetch/logo-small.txt', 'default/fastfetch/logo-none.txt']:
         destination = packaged / name
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(root / name, destination)
@@ -72,3 +73,20 @@ with tempfile.TemporaryDirectory(prefix='fastfetch paths ') as directory:
                 assert '\x1b' not in output, 'Plain output contains escapes'
             results.append(dict(columns=columns, terminal=terminal, no_color=no_color, selected=filename, passed=True))
 print('Native fastfetch:', len(results), 'size/color/redirect cases passed in C locale with spaced package path')
+
+# Keep a native production-layout render at both normal and narrow widths.
+# The 54-column custom boxes must start at column zero when the logo is hidden.
+for columns in (64, 80):
+    with tempfile.TemporaryDirectory() as directory:
+        production = dict(config, modules=production_modules)
+        production_path = Path(directory) / "production.json"
+        production_path.write_text(json.dumps(production))
+        env = dict(os.environ, OMARCHY_PATH=str(root), PATH=str(root / "bin") + ":" + os.environ["PATH"], COLUMNS=str(columns), LINES="40", NO_COLOR="1")
+        result = subprocess.run([binary, "--config", str(production_path)], env=env, capture_output=True, text=True, timeout=10, check=True)
+        plain = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", result.stdout)
+        boxes = [line for line in plain.splitlines() if "Hardware" in line or "Software" in line]
+        assert len(boxes) == 2, result.stdout
+        if columns == 64:
+            assert all(line.lstrip().startswith("┌") and len(line) <= columns for line in boxes), boxes
+            assert "██████████████" not in plain, plain
+print("Native fastfetch: production module layout checked at 64 and 80 columns")
