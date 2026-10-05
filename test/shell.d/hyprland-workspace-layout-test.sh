@@ -200,6 +200,7 @@ for _, rule in ipairs(rules) do
 end
 
 assert(seen["3"] == "scrolling", "numeric workspace rule did not load")
-assert(seen["name:DP-1 desk:1"] == "scrolling", "named workspace rule did not load")
+assert(seen["name:dev.foo"] == "scrolling", "first named workspace rule did not load")
+assert(seen["name:dev_foo"] == "scrolling", "second named workspace rule did not load")
 assert(seen["-1340"] == nil, "stale id-keyed rule was not left behind")
 LUA
