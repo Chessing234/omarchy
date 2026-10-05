@@ -20,7 +20,7 @@ file first, if one exists.
 └── theme-set.d/            # After theme change (theme slug in $1)
 ```
 
-`agent-launch` has a five-second deadline for the whole run, including the flat hook and every script in `agent-launch.d` in sequence. A hook that ignores termination is killed one second later; later scripts may never run. Keep these hooks short or hand longer work to a background service. Hook output, failure messages, and timeout diagnostics go to the system journal under `omarchy-agent-hook`; read them with `journalctl -t omarchy-agent-hook`. Hook input is isolated from the agent terminal, and failures still allow the agent to start.
+`agent-launch` has a five-second deadline for the whole run, including the flat hook and every script in `agent-launch.d` in sequence. A hook that ignores termination is killed one second later; later scripts may never run. Keep these hooks short or hand longer work to a background service. Hook stdout and stderr are discarded so background work can keep its output descriptors without blocking launch or being terminated by a closed logging pipe. Failed hook runs and timeouts produce a status diagnostic in the system journal under `omarchy-agent-hook`; read those with `journalctl -t omarchy-agent-hook`. For successful-hook troubleshooting, write explicitly to your own log or use `logger` inside the hook. Hook input is isolated from the agent terminal, and failures still allow the agent to start.
 
 Example hook script:
 ```bash
