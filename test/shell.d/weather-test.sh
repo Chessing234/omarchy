@@ -154,6 +154,14 @@ assertEqual(
   weather.iconForCode(389, false),
   'weather picks hourly forecast icon nearest noon'
 )
+const injectedPanel = {moduleName: 'omarchy.weather', settings: {}, hostWidget: null, bar: null, anchorItem: null}
+const clone = {moduleName: 'custom.weather', settings: {unit: 'metric'}, bar: {shell: {updateEntryInline(id, entry) { assert(id === clone.moduleName, 'clone persists through its own scoped identity'); assertEqual(entry.unit, 'imperial', 'clone unit is saved')}}}}
+const inject = widgetSource.match(/function injectPanel\(\) \{[\s\S]*?\n  \}/)[0]
+new Function('root', 'panelLoader', 'button', inject + '; injectPanel()')(clone, {item: injectedPanel}, {})
+assertEqual(injectedPanel.moduleName, clone.moduleName, 'weather panel receives the clone identity')
+const persist = panelSource.match(/function persistSettings\(values\) \{[\s\S]*?\n  \}/)[0]
+new Function('root', persist + '; persistSettings({unit:"imperial"})')(injectedPanel)
+
 JS
 
 test_tmp=$(mktemp -d)

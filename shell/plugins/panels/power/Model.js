@@ -111,7 +111,7 @@ function batteryIcon(device, onBattery, states, threshold) {
   var index = Math.max(0, Math.min(9, Math.floor(d.percentage * 10)))
   var holding = chargeThresholdActive(d, onBattery, states, threshold)
 
-  if (holding) return defaultIcons[index]
+  if (holding || (!onBattery && d.state === states.PendingCharge)) return defaultIcons[index]
   if (d.state === states.FullyCharged) return "󰂅"
   if (!onBattery) return chargingIcons[index]
   return defaultIcons[index]
@@ -129,6 +129,7 @@ function modeLabel(device, onBattery, states, threshold) {
   // cannot see that, and the icon already reads the state, so the label has
   // to as well or the two disagree on the same battery.
   if (d.state === s.FullyCharged || percentage >= 1) return "Fully charged"
+  if (d.state === s.PendingCharge) return "Not charging"
   return "Charging"
 }
 
