@@ -129,3 +129,18 @@ printf 'after cleanup' | HOME="$test_home" PATH="$mock_bin:$ROOT/bin:$PATH" \
 [[ $(cat "$hook_log") == "cleanup" && $(cat "$harness_log") == "after cleanup" ]] ||
   fail "hook TERM cleanup must run before the harness starts"
 pass "timed out hooks can run their TERM cleanup handler"
+
+# A noisy hook cannot hide its failure behind the bounded output snapshot.
+cat >"$test_home/.config/omarchy/hooks/agent-launch" <<'SH'
+#!/bin/bash
+head -c 1000000 /dev/zero
+exit 7
+SH
+: >"$OMARCHY_TEST_HOOK_DIAGNOSTICS"
+printf 'after noisy hook' | HOME="$test_home" PATH="$mock_bin:$ROOT/bin:$PATH" \
+  OMARCHY_TEST_HARNESS_LOG="$harness_log" "$ROOT/bin/omarchy-agent" --inline >"$test_tmp/output" 2>&1
+grep -aq 'agent-launch hook failed or timed out (status ' "$OMARCHY_TEST_HOOK_DIAGNOSTICS" ||
+  fail "noisy hook must leave an independent failure diagnostic"
+[[ $(wc -c <"$OMARCHY_TEST_HOOK_DIAGNOSTICS") -lt 34000 ]] ||
+  fail "hook diagnostic output must stay bounded"
+pass "noisy hooks keep bounded output and visible failure status"

@@ -143,12 +143,14 @@ if command -v omarchy-hook >/dev/null 2>&1; then
     umask 077
     hook_log=$(mktemp) || exit 0
     trap 'rm -f -- "$hook_log"' EXIT
+    # Descendants retain this file limit even after the temporary path is removed.
+    ulimit -f 64 || exit 0
     # A caught TERM resets in child processes, allowing hook cleanup handlers.
     # Keep the supervisor alive past the kill-after interval for descendants.
     timeout --kill-after=1s 5s bash -c 'trap "sleep 2" TERM; omarchy-hook "$@"' bash agent-launch "$agent" "$PWD" >"$hook_log" 2>&1
     hook_status=$?
     if (( hook_status != 0 )); then
-      printf 'agent-launch hook failed or timed out (status %s)\n' "$hook_status" >>"$hook_log"
+      printf 'agent-launch hook failed or timed out (status %s)\n' "$hook_status" | logger --tag omarchy-agent-hook || true
     fi
     head -c 32768 "$hook_log" | logger --tag omarchy-agent-hook || true
   ) </dev/null 2>/dev/null || true
