@@ -48,7 +48,7 @@ cat >"$mock_bin/uwsm-app" <<'SH'
 #!/bin/bash
 [[ $1 == "--" ]] || exit 90
 shift
-exec "$@"
+exec env -u OMARCHY_AGENT -u OMARCHY_AGENT_CWD "$@"
 SH
 cat >"$mock_bin/xdg-terminal-exec" <<'SH'
 #!/bin/bash

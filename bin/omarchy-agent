@@ -169,5 +169,5 @@ if [[ $inline == "true" ]]; then
 else
   # A fixed app-id rather than the default org.omarchy.<binary>, so every agent
   # window shares one class for window rules and themes to single out.
-  exec omarchy-launch-tui --app-id=org.omarchy.agent "${command[@]}"
+  exec omarchy-launch-tui --app-id=org.omarchy.agent env "OMARCHY_AGENT=$agent" "OMARCHY_AGENT_CWD=$PWD" "${command[@]}"
 fi
