@@ -136,19 +136,45 @@ pi)
   ;;
 esac
 
-# Opt-in user scripts under ~/.config/omarchy/hooks/agent-launch{,.d}/ see the
-# harness name and cwd before the process is replaced. Limit this notification
-# to five seconds and isolate terminal IO; failures never block the launch.
+# Opt-in hooks get bounded time and private diagnostic output. A hook that
+# leaves background work running cannot keep the launcher's logger pipe open.
 if command -v omarchy-hook >/dev/null 2>&1; then
   (
-    # Keep the supervised shell alive through TERM so timeout still sends
-    # KILL to the whole hook group, including descendants holding log pipes.
-    timeout --kill-after=1s 5s bash -c 'trap "" TERM; omarchy-hook "$@"' bash agent-launch "$agent" "$PWD"
+    umask 077
+    hook_log=$(mktemp) || exit 0
+    trap 'rm -f -- "$hook_log"' EXIT
+    # A caught TERM resets in child processes, allowing hook cleanup handlers.
+    # Keep the supervisor alive past the kill-after interval for descendants.
+    timeout --kill-after=1s 5s bash -c 'trap "sleep 2" TERM; omarchy-hook "$@"' bash agent-launch "$agent" "$PWD" >"$hook_log" 2>&1
     hook_status=$?
     if (( hook_status != 0 )); then
-      printf 'agent-launch hook failed or timed out (status %s)\n' "$hook_status"
+      printf 'agent-launch hook failed or timed out (status %s)\n' "$hook_status" >>"$hook_log"
     fi
-  ) </dev/null 2>&1 | logger --tag omarchy-agent-hook || true
+    head -c 32768 "$hook_log" | logger --tag omarchy-agent-hook || true
+  ) </dev/null 2>/dev/null || true
+fi
+
+# A new session uses the current selection rather than its parent's account
+# pin. Explicit provider homes still override the selection. Carry the new pin
+# in the command, since terminals launched through uwsm don't inherit our env.
+case "$agent" in
+claude) home_env="CLAUDE_CONFIG_DIR" ;;
+codex) home_env="CODEX_HOME" ;;
+grok) home_env="GROK_HOME" ;;
+*) home_env="" ;;
+esac
+if [[ -n $home_env ]]; then
+  account_pin="OMARCHY_AGENT_${agent^^}_HOME"
+  if [[ -v $account_pin && ${!home_env:-} == "${!account_pin}" ]]; then
+    unset "$home_env"
+  fi
+  unset "$account_pin"
+  if [[ -z ${!home_env:-} ]]; then
+    home=$(omarchy-agent-account-home "$agent")
+    account_env=(env -u "$home_env" "$account_pin=$home")
+    [[ -n $home ]] && account_env+=("$home_env=$home")
+    command=("${account_env[@]}" "${command[@]}")
+  fi
 fi
 
 if [[ $inline == "true" ]]; then

@@ -98,3 +98,34 @@ elapsed=$((SECONDS - start))
 grep -q 'agent-launch hook failed or timed out (status ' "$OMARCHY_TEST_HOOK_DIAGNOSTICS" ||
   fail "a hook deadline must leave a journal diagnostic"
 pass "a hook ignoring TERM cannot block the launch indefinitely"
+
+# A returned hook may leave a child holding its diagnostic streams open.
+cat >"$test_home/.config/omarchy/hooks/agent-launch" <<'SH'
+#!/bin/bash
+sleep 30 &
+printf '%s\n' "$!" >"$OMARCHY_TEST_HOOK_LOG"
+echo background-hook-returned
+SH
+start=$SECONDS
+printf 'after background' | HOME="$test_home" PATH="$mock_bin:$ROOT/bin:$PATH" \
+  OMARCHY_TEST_HOOK_LOG="$hook_log" OMARCHY_TEST_HARNESS_LOG="$harness_log" \
+  "$ROOT/bin/omarchy-agent" --inline >"$test_tmp/output" 2>&1
+elapsed=$((SECONDS - start))
+kill "$(cat "$hook_log")" 2>/dev/null || true
+(( elapsed < 5 )) && [[ $(cat "$harness_log") == "after background" ]] ||
+  fail "returned hook background streams delay the harness" "$elapsed seconds"
+pass "background hook output cannot keep the launcher waiting"
+
+# TERM must reach the hook with its default disposition so it can catch it.
+cat >"$test_home/.config/omarchy/hooks/agent-launch" <<'SH'
+#!/bin/bash
+trap 'echo cleanup >"$OMARCHY_TEST_HOOK_LOG"; exit 0' TERM
+while true; do sleep 0.1; done
+SH
+: >"$hook_log"
+printf 'after cleanup' | HOME="$test_home" PATH="$mock_bin:$ROOT/bin:$PATH" \
+  OMARCHY_TEST_HOOK_LOG="$hook_log" OMARCHY_TEST_HARNESS_LOG="$harness_log" \
+  "$ROOT/bin/omarchy-agent" --inline >"$test_tmp/output" 2>&1
+[[ $(cat "$hook_log") == "cleanup" && $(cat "$harness_log") == "after cleanup" ]] ||
+  fail "hook TERM cleanup must run before the harness starts"
+pass "timed out hooks can run their TERM cleanup handler"
