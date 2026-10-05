@@ -268,19 +268,19 @@ pass "monitor scaling preserves symlinked monitors.lua for named rules"
 
 # A failed transform/publication must not truncate the real dotfile, silently
 # fall back to appending a rule, or report success after the live change.
-real_awk=$(command -v awk)
+real_python=$(command -v python3)
 real_cat=$(command -v cat)
 real_sed=$(command -v sed)
 real_mv=$(command -v mv)
-export OMARCHY_TEST_REAL_AWK="$real_awk" OMARCHY_TEST_REAL_CAT="$real_cat"
+export OMARCHY_TEST_REAL_PYTHON="$real_python" OMARCHY_TEST_REAL_CAT="$real_cat"
 export OMARCHY_TEST_REAL_SED="$real_sed" OMARCHY_TEST_REAL_MV="$real_mv"
-cat >"$stub_bin/awk" <<'STUB'
+cat >"$stub_bin/python3" <<'STUB'
 #!/bin/bash
-if [[ ${OMARCHY_TEST_FAIL:-} == awk && $* == *'function strip_comment'* ]]; then
+if [[ ${OMARCHY_TEST_FAIL:-} == python3 ]]; then
   printf 'partial transform\n'
   exit 2
 fi
-exec "$OMARCHY_TEST_REAL_AWK" "$@"
+exec "$OMARCHY_TEST_REAL_PYTHON" "$@"
 STUB
 cat >"$stub_bin/cat" <<'STUB'
 #!/bin/bash
@@ -302,8 +302,8 @@ cat >"$stub_bin/mv" <<'STUB'
 if [[ ${OMARCHY_TEST_FAIL:-} == mv ]]; then exit 1; fi
 exec "$OMARCHY_TEST_REAL_MV" "$@"
 STUB
-chmod +x "$stub_bin/"{awk,cat,sed,mv}
-for failure in awk cat sed mv; do
+chmod +x "$stub_bin/"{python3,cat,sed,mv}
+for failure in python3 cat sed mv; do
   cat >"$dotfiles_named" <<'LUA'
 local omarchy_gdk_scale = 2
 hl.env("GDK_SCALE", "2")
@@ -324,3 +324,26 @@ run_scaling 3
 [[ $(stat -c %a "$dotfiles_named") == 640 ]] || fail "atomic monitor update preserves mode"
 grep -Fx 'hl.env("GDK_SCALE", "3")' "$dotfiles_named" >/dev/null || fail "atomic update includes GDK scale"
 pass "monitor scaling publishes both settings and preserves mode"
+
+cat >"$monitor_lua" <<'LUA'
+--[=[
+hl.monitor({ output = "eDP-1", scale = 1 })
+]=]
+hl.monitor({
+  output = "eDP-1",
+  scale = 2 -- internal panel
+})
+LUA
+run_scaling 3
+grep -F 'scale = 3 -- internal panel' "$monitor_lua" >/dev/null || fail "trailing comment must preserve the saved scale"
+grep -F 'output = "eDP-1", scale = 1' "$monitor_lua" >/dev/null || fail "long comments must remain unchanged"
+pass "monitor scaling preserves trailing comments and skips Lua long comments"
+cat >"$monitor_lua" <<'LUA'
+local omarchy_monitor_scale = 2
+--[[
+hl.monitor({ output = "eDP-1", scale = 1 })
+]]
+LUA
+run_scaling 3
+grep -Fx 'local omarchy_monitor_scale = 3' "$monitor_lua" >/dev/null || fail "a disabled named rule must allow active catch-all persistence"
+pass "disabled named monitor rules do not prevent catch-all persistence"
