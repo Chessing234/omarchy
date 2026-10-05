@@ -351,7 +351,7 @@ for name, percent in (("account-a", 10.0), ("account-b", 80.0)):
   config.mkdir(parents=True, exist_ok=True)
   os.environ["CLAUDE_CONFIG_DIR"] = str(config)
   collector.urllib.request.urlopen = lambda request, timeout=None, percent=percent: io.BytesIO(payload_for(percent))
-  collector.collect_limits("token", 0, 0, True)
+  collector.collect_limits("token", 0, 0, True, "claude-limits.json" if name == "account-a" else None)
   digest = hashlib.sha1(str(collector.config_dir()).encode("utf-8")).hexdigest()[:16]
   path = root / f"claude-limits-{digest}.json"
   paths.append(str(path))

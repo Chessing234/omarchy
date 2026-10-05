@@ -1081,13 +1081,15 @@ def collect_limits(access_token: str, expires_at_ms: int, refresh_expires_at_ms:
   # kept as the answer of record when a later probe fails. Every account
   # keeps its own, so one account's allowance never stands in for another's.
   root = cache_root()
-  if cache_name is None:
+  # An unkeyed cache cannot identify its subscription, even when an account
+  # registry explicitly asks for it. Never use it as a live primary allowance.
+  try:
+    (root / "claude-limits.json").unlink(missing_ok=True)
+  except OSError:
+    pass
+  if cache_name is None or cache_name == "claude-limits.json":
     digest = hashlib.sha1(str(config_dir()).encode("utf-8")).hexdigest()[:16]
     cache_name = f"claude-limits-{digest}.json"
-    try:
-      (root / "claude-limits.json").unlink(missing_ok=True)
-    except OSError:
-      pass
   probe_cache = root / cache_name
   cached = read_json(probe_cache) or {}
   fallback = usable_cached_limits(cached)
