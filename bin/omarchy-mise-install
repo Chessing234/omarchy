@@ -53,6 +53,7 @@ mise use -g --quiet "$package" || exit 1
 rm -f "$HOME/.local/bin/$command"
 cat >"$HOME/.local/bin/$command" <<EOF
 #!/bin/bash
+# omarchy:mise-managed=true
 exec mise x $package_arg -- $bin_arg "\$@"
 EOF
 

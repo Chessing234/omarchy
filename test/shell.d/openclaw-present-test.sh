@@ -46,17 +46,17 @@ exit 0
 SH
 chmod +x "$tmp/bin/omarchy-pkg-add"
 
-omarchy-install-openclaw-cli --check || fail "--check should succeed for PATH openclaw"
-omarchy-install-openclaw-cli --now || fail "--now should succeed without installing"
+if omarchy-install-openclaw-cli --check; then fail "--check must reject an incomplete managed runtime"; fi
+if omarchy-install-openclaw-cli --now; then fail "--now must reject a foreign PATH install"; fi
 if [[ -s $TEST_LOG ]]; then
   fail "--now must not reinstall over a PATH openclaw" "$(cat "$TEST_LOG")"
 fi
-pass "install-openclaw-cli leaves a PATH openclaw alone"
+pass "install-openclaw-cli rejects a foreign PATH openclaw without reinstalling"
 
 rm -f "$tmp/bin/openclaw"
 touch "$XDG_CONFIG_HOME/systemd/user/openclaw-gateway.service"
-omarchy-openclaw-present || fail "gateway unit should count as present"
-pass "gateway unit counts as present"
+if omarchy-openclaw-present; then fail "a gateway unit without a command must not count as installed"; fi
+pass "a gateway unit without its CLI does not hide installation"
 
 # Shadowed PATH warning (exercise the detection the launcher uses).
 rm -f "$XDG_CONFIG_HOME/systemd/user/openclaw-gateway.service"
