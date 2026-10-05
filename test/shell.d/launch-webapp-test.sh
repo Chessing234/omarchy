@@ -28,6 +28,11 @@ cat >"$mock_bin/uwsm-app" <<'SH'
 #!/bin/bash
 printf '%s\n' "$*" >"$OMARCHY_TEST_WEBAPP_LAUNCH"
 SH
+ln -s "$ROOT/bin/omarchy-cmd-default-browser" "$mock_bin/omarchy-cmd-default-browser"
+cat >"$mock_bin/omarchy-cmd-browser-handoff" <<'SH'
+#!/bin/bash
+exit 1
+SH
 chmod +x "$mock_bin"/*
 
 launch_log="$test_tmp/launch"

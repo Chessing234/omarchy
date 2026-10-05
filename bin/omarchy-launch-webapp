@@ -40,7 +40,7 @@ for flag in "$@"; do
   fi
 done
 
-browser=$(xdg-settings get default-web-browser)
+browser=$(omarchy-cmd-default-browser)
 
 case $browser in
 google-chrome* | brave* | microsoft-edge* | opera* | vivaldi* | helium*) ;;
@@ -66,4 +66,6 @@ if [[ -z $browser_exec ]]; then
   exit 1
 fi
 
-exec setsid uwsm-app -- "$browser_exec" --app="$url" "$@"
+if ! omarchy-cmd-browser-handoff "$browser_exec" --app="$url" "$@"; then
+  exec setsid uwsm-app -- "$browser_exec" --app="$url" "$@"
+fi

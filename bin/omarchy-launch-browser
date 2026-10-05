@@ -5,10 +5,7 @@
 
 set -euo pipefail
 
-default_browser=$(env -u BROWSER xdg-settings get default-web-browser)
-if [[ -z $default_browser ]]; then
-  default_browser=$(xdg-mime query default x-scheme-handler/https)
-fi
+default_browser=$(omarchy-cmd-default-browser)
 
 if [[ $default_browser != *.desktop || $default_browser == */* || $default_browser == *..* ]]; then
   default_browser=chromium.desktop
@@ -61,9 +58,11 @@ for argument in "$@"; do
   launch_args+=("$url")
 done
 
-systemd-run --user --quiet --collect --unit="omarchy-browser-$(date +%s%N)" \
-  --property=StandardOutput=null --property=StandardError=null \
-  uwsm-app -- "$browser_exec" "${launch_args[@]}"
+if ! omarchy-cmd-browser-handoff "$browser_exec" "${launch_args[@]}"; then
+  systemd-run --user --quiet --collect --unit="omarchy-browser-$(date +%s%N)" \
+    --property=StandardOutput=null --property=StandardError=null \
+    uwsm-app -- "$browser_exec" "${launch_args[@]}"
+fi
 
 if [[ -n $url && -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]]; then
   omarchy-hyprland-focus-app "^$(basename "$browser_exec" -stable).*$" || true
