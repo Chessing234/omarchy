@@ -134,7 +134,7 @@ pass "timed out hooks can run their TERM cleanup handler"
 cat >"$test_home/.config/omarchy/hooks/agent-launch" <<'SH'
 #!/bin/bash
 head -c 1000000 /dev/zero
-exit 7
+sleep 10
 SH
 : >"$OMARCHY_TEST_HOOK_DIAGNOSTICS"
 printf 'after noisy hook' | HOME="$test_home" PATH="$mock_bin:$ROOT/bin:$PATH" \
@@ -144,3 +144,14 @@ grep -aq 'agent-launch hook failed or timed out (status ' "$OMARCHY_TEST_HOOK_DI
 [[ $(wc -c <"$OMARCHY_TEST_HOOK_DIAGNOSTICS") -lt 34000 ]] ||
   fail "hook diagnostic output must stay bounded"
 pass "noisy hooks keep bounded output and visible failure status"
+
+# The log cap must not become an inherited limit on the hook's own files.
+cat >"$test_home/.config/omarchy/hooks/agent-launch" <<'SH'
+#!/bin/bash
+head -c 100000 /dev/zero >"$OMARCHY_TEST_HOOK_LOG"
+SH
+HOME="$test_home" PATH="$mock_bin:$ROOT/bin:$PATH" \
+  OMARCHY_TEST_HOOK_LOG="$hook_log" OMARCHY_TEST_HARNESS_LOG="$harness_log" \
+  "$ROOT/bin/omarchy-agent" --inline
+[[ $(wc -c <"$hook_log") -eq 100000 ]] || fail "hook files must not inherit the diagnostic size limit"
+pass "hooks can write files larger than the diagnostic snapshot"

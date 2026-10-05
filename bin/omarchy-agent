@@ -141,17 +141,57 @@ esac
 if command -v omarchy-hook >/dev/null 2>&1; then
   (
     umask 077
-    hook_log=$(mktemp) || exit 0
-    trap 'rm -f -- "$hook_log"' EXIT
-    # Descendants retain this file limit even after the temporary path is removed.
-    ulimit -f 64 || exit 0
+    hook_dir=$(mktemp -d) || exit 0
+    hook_log="$hook_dir/output"
+    hook_fifo="$hook_dir/pipe"
+    capture_pid=""
+    trap '[[ -z $capture_pid ]] || kill "$capture_pid" 2>/dev/null; rm -rf -- "$hook_dir"' EXIT
+    mkfifo "$hook_fifo" || exit 0
+    # Bound only the diagnostic snapshot, never files written by the hook.
+    python3 -c '
+import os, signal, sys
+pipe = os.open(sys.argv[2], os.O_RDWR)
+drain_budget = None
+def stop(*_):
+  global drain_budget
+  drain_budget = 65536
+  os.set_blocking(pipe, False)
+signal.signal(signal.SIGTERM, stop)
+with open(sys.argv[1], "wb", buffering=0) as log:
+  open(sys.argv[3], "w").close()
+  remaining = 32768
+  while True:
+    try:
+      chunk = os.read(pipe, 4096)
+    except BlockingIOError:
+      break
+    if not chunk:
+      break
+    log.write(chunk[:remaining])
+    remaining = max(0, remaining - len(chunk))
+    if drain_budget is not None:
+      drain_budget -= len(chunk)
+      if drain_budget <= 0:
+        break
+' "$hook_log" "$hook_fifo" "$hook_dir/ready" &
+    capture_pid=$!
+    for (( attempt=0; attempt<100; attempt++ )); do
+      [[ -e $hook_dir/ready ]] && break
+      kill -0 "$capture_pid" 2>/dev/null || exit 0
+      sleep 0.01
+    done
+    [[ -e $hook_dir/ready ]] || exit 0
     # A caught TERM resets in child processes, allowing hook cleanup handlers.
     # Keep the supervisor alive past the kill-after interval for descendants.
-    timeout --kill-after=1s 5s bash -c 'trap "sleep 2" TERM; omarchy-hook "$@"' bash agent-launch "$agent" "$PWD" >"$hook_log" 2>&1
+    timeout --kill-after=1s 5s bash -c 'trap "sleep 2" TERM; omarchy-hook "$@"' bash agent-launch "$agent" "$PWD" >"$hook_fifo" 2>&1
     hook_status=$?
     if (( hook_status != 0 )); then
       printf 'agent-launch hook failed or timed out (status %s)\n' "$hook_status" | logger --tag omarchy-agent-hook || true
     fi
+    # A returned hook can leave descendants holding the pipe open.
+    kill "$capture_pid" 2>/dev/null || true
+    wait "$capture_pid" 2>/dev/null || true
+    capture_pid=""
     head -c 32768 "$hook_log" | logger --tag omarchy-agent-hook || true
   ) </dev/null 2>/dev/null || true
 fi
