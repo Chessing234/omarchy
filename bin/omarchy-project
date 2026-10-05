@@ -37,7 +37,7 @@ def run(argv, **kwargs):
 
 
 config = Path(os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")) / "omarchy/projects"
-parser = argparse.ArgumentParser(description="Save a project setup and reopen it on a named Hyprland workspace")
+parser = argparse.ArgumentParser(prog="omarchy project", description="Save a project setup and reopen it on a named Hyprland workspace")
 commands = parser.add_subparsers(dest="command")
 init = commands.add_parser("init", help="Create a recipe without overwriting an existing one")
 init.add_argument("name")
@@ -94,8 +94,6 @@ try:
   for argv in terminals:
     if not isinstance(argv, list) or not all(plain(arg) for arg in argv) or (argv and (not argv[0] or argv[0].startswith("-"))):
       fail("Terminal commands must be argument arrays without control characters")
-    if args.command == "open" and argv and not shutil.which(argv[0], path=os.environ.get("PATH")):
-      fail("Command is not installed: " + argv[0])
   if not isinstance(urls, list) or len(urls) > 16:
     fail("urls must be an array of at most 16 HTTP(S) links")
   for url in urls:
@@ -115,8 +113,19 @@ try:
     if not isinstance(clients, list):
       fail("Hyprland returned an invalid client list")
     occupied = any(client.get("workspace", {}).get("name") == workspace for client in clients)
+    launch = args.launch or not occupied
+    if launch:
+      for argv in terminals:
+        if not argv: continue
+        if "/" in argv[0]:
+          executable = Path(argv[0])
+          if not executable.is_absolute(): executable = Path(directory) / executable
+          available = executable.is_file() and os.access(executable, os.X_OK)
+        else:
+          available = shutil.which(argv[0], path=os.environ.get("PATH")) is not None
+        if not available: fail("Command is not installed: " + argv[0])
     run(["hyprctl", "dispatch", "workspace", "name:" + workspace], stdout=subprocess.DEVNULL)
-    if args.launch or not occupied:
+    if launch:
       for argv in terminals:
         terminal = ["uwsm-app", "--", "xdg-terminal-exec", "--dir=" + directory]
         if argv:

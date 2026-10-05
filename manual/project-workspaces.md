@@ -24,7 +24,7 @@ The first command prints the recipe's path under `~/.config/omarchy/projects/` (
 }
 ```
 
-Each terminal starts in the saved directory on the workspace `project-shop`. An empty array opens your default shell. Other arrays contain a command and its arguments; each argument stays literal. Use an explicit shell command such as `["bash", "-lc", "npm run dev && bash"]` if you want shell syntax. Commands and links are launched when you explicitly open a saved recipe; recipes in downloaded repositories are never discovered or executed automatically.
+Each terminal starts in the saved directory on the workspace `project-shop`. An empty array opens your default shell. Other arrays contain a command and its arguments; each argument stays literal. Executable paths such as `./bin/dev` are relative to the saved project directory. Use an explicit shell command such as `["bash", "-lc", "npm run dev && bash"]` if you want shell syntax. Commands and links are launched when you explicitly open a saved recipe; recipes in downloaded repositories are never discovered or executed automatically.
 
 Browser links open through your default browser. An existing browser may reuse a window on another workspace; project workspaces do not move those windows or start separate browser profiles. Server terminals and browser links start independently, so reload a local page if its server is still starting.
 

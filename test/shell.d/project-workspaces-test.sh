@@ -84,7 +84,14 @@ with open(os.environ["TEST_CALLS"], "a") as log:
     recipe_path.write_text(json.dumps(bad))
     log.write_text("")
     call("open", "demo", "--launch", success=False)
-    assert not log.read_text(), "Invalid recipe must fail before any desktop action"
+    assert not any(json.loads(line)[0] in ("dispatch", "browser") for line in log.read_text().splitlines()), "Invalid recipe must fail before any desktop action"
+  relative = directory / "tool"
+  relative.write_text("#!/bin/sh\nexit 0\n")
+  relative.chmod(0o755)
+  recipe_path.write_text(json.dumps(dict(recipe, terminals=[["./tool"]])))
+  call("open", "demo", "--launch")
+  recipe_path.write_text(json.dumps(dict(recipe, terminals=[["missing-omarchy-test-command"]])))
+  call("open", "demo") # Focusing existing windows does not require reinstalling their commands.
   recipe_path.write_text(json.dumps(recipe))
   call("open", "demo", "--launch", success=False, override={"TEST_FAIL_EXEC": "1"})
 print("ok - project recipes preserve paths and literal argv, reject invalid input before launch, focus existing workspaces, support the picker, and report dispatch failure")
