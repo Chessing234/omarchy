@@ -53,6 +53,10 @@ elif [[ $1 == "workspaces" ]]; then
   printf ']\n'
 else
   printf '%s\n' "$*" >>"$HYPRCTL_LOG"
+  [[ $1 == "eval" && -n ${HYPRCTL_EVAL_FAIL:-} ]] && exit 1
+  if [[ $1 == "keyword" && $2 == "workspace" && $3 == "$HYPRCTL_ACCEPTS, layout:"* ]]; then
+    printf '%s\n' "${3##*layout:}" >"$state"
+  fi
   if [[ $1 == "eval" && -n $HYPRCTL_ACCEPTS && $* == *"workspace = \"$HYPRCTL_ACCEPTS\""* ]]; then
     printf '%s\n' "$(sed -n 's/.*layout = "\([^"]*\)".*/\1/p' <<<"$*")" >"$state"
   fi
@@ -131,15 +135,15 @@ rm -f "$named_file"
 run_toggle HYPRCTL_STATE="$tmpdir/s4" HYPRCTL_ID=-1340 HYPRCTL_NAME="DP-1 desk:1" \
   HYPRCTL_ACCEPTS="name:DP-1 desk:1" ||
   fail "workspace layout toggle succeeds when replacing an id-keyed state file"
-[[ -f $layouts_dir/-1337.lua ]] &&
-  fail "workspace layout toggle removes this workspace's leftover id-keyed file"
-[[ -f $layouts_dir/-1340.lua ]] &&
-  fail "workspace layout toggle removes leftover files even when they match the current id"
+[[ -f $layouts_dir/-1337.lua ]] ||
+  fail "workspace layout toggle preserves other saved workspace layouts"
+[[ -f $layouts_dir/-1340.lua ]] ||
+  fail "workspace layout toggle preserves legacy state whose owner is unknown"
 [[ -f $layouts_dir/4.lua ]] ||
   fail "workspace layout toggle leaves numeric workspace files alone"
 [[ -f $named_file ]] ||
   fail "workspace layout toggle still writes the name-based state file"
-pass "workspace layout toggle removes leftover id-keyed state files"
+pass "workspace layout toggle preserves legacy saved layouts"
 
 # ── readback uses the named workspace, not a later active workspace ──────────
 # If the user switches away between apply and readback, re-querying
@@ -202,5 +206,14 @@ end
 assert(seen["3"] == "scrolling", "numeric workspace rule did not load")
 assert(seen["name:dev.foo"] == "scrolling", "first named workspace rule did not load")
 assert(seen["name:dev_foo"] == "scrolling", "second named workspace rule did not load")
-assert(seen["-1340"] == nil, "stale id-keyed rule was not left behind")
+assert(seen["-1340"] == "dwindle", "legacy saved layout was discarded")
 LUA
+
+[[ ! -f "$layouts_dir/name-6465736b.lua" ]] || fail "failed toggle persisted a new rule"
+run_toggle HYPRCTL_STATE="$tmpdir/s_special" HYPRCTL_ID=-99 HYPRCTL_NAME="special:scratchpad" HYPRCTL_ACCEPTS="special:scratchpad" ||
+  fail "special workspace uses its literal special selector"
+run_toggle HYPRCTL_STATE="$tmpdir/s_fallback" HYPRCTL_EVAL_FAIL=1 HYPRCTL_ID=9 HYPRCTL_NAME=9 HYPRCTL_ACCEPTS=9 ||
+  fail "keyword fallback applies and persists a confirmed layout"
+grep -Fx 'keyword workspace 9, layout:scrolling' "$log_file" >/dev/null ||
+  fail "eval failure did not use the keyword fallback"
+pass "special workspace selectors and keyword fallback both work"
