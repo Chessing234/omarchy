@@ -38,8 +38,8 @@ assert(!power.chargeThresholdActive({ isPresent: true, percentage: 0.8, state: s
 assertEqual(power.chargeHoldFloor('0-80%'), 0.8, 'power reads a zero start threshold as no start band')
 assertEqual(
   power.modeLabel({ isPresent: true, percentage: 0, state: states.PendingCharge }, false, states, '75-80%'),
-  'Charging',
-  'power does not label a stalled pack below the band as Threshold'
+  'Not charging',
+  'power labels a stopped pack below the band as not charging'
 )
 assert(power.chargeThresholdActive({ isPresent: true, percentage: 0.8, state: states.Charging, changeRate: 0.1, timeToFull: 120 }, false, states, '75-80%'), 'power detects threshold by stalled charging')
 assert(!power.chargeThresholdActive({ isPresent: true, percentage: 0.8, state: states.Charging, changeRate: 1.0, timeToFull: 120 }, false, states, '75-80%'), 'power does not flag active charging as threshold')
@@ -66,6 +66,8 @@ assertEqual(
 )
 assert(!power.chargeThresholdActive({ isPresent: true, percentage: 0.5, state: states.Discharging }, false, states), 'power does not flag discharging as threshold')
 assertEqual(power.modeLabel({ isPresent: true, percentage: 1, state: states.FullyCharged }, false, states), 'Fully charged', 'power labels full battery')
+assertEqual(power.modeLabel({ isPresent: true, percentage: 0.5, state: states.PendingCharge }, false, states), 'Not charging', 'pending charge without a limit is not charging')
+assertEqual(power.batteryIcon({ isPresent: true, percentage: 0.4, state: states.PendingCharge }, false, states), power.batteryIcon({ isPresent: true, percentage: 0.4, state: states.Discharging }, true, states), 'stopped battery uses a level icon without charging bolt')
 assertEqual(power.modeLabel({ isPresent: true, percentage: 0.5, state: states.Discharging }, true, states), 'On battery', 'power labels battery mode')
 assertEqual(power.modeLabel({ isPresent: true, percentage: 0.5, state: states.Discharging }, false, states), 'Charging', 'power treats external power as newer than stale discharging state')
 assert(power.batteryIcon({ isPresent: true, percentage: 0.4, state: states.Charging }, false, states).length > 0, 'power maps battery icons')

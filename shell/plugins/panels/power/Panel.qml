@@ -79,7 +79,11 @@ Panel {
     return Model.chargeThresholdActive(device, root.discharging, upowerStates(), root.batteryInfo.threshold)
   }
   readonly property bool batteryFull: fullyCharged || (!root.discharging && batteryFraction >= 1)
-  readonly property bool batteryFlowIdle: batteryFull || chargeThresholdActive
+  readonly property bool pendingCharge: {
+    var device = UPower.displayDevice
+    return !!(device && device.isPresent && !UPower.onBattery && device.state === UPowerDeviceState.PendingCharge)
+  }
+  readonly property bool batteryFlowIdle: batteryFull || chargeThresholdActive || pendingCharge
 
   // 0..1 charge level, used by the visual progress bar.
   readonly property real batteryFraction: {
@@ -179,7 +183,7 @@ Panel {
     if (root.bar && root.bar.shell) root.bar.shell.updateEntryInline(root.moduleName, root.settings)
   }
 
-  IpcHandler {
+  ShellIpc {
     target: "omarchy.power"
 
     function open() { root.open() }
@@ -260,7 +264,7 @@ Panel {
     id: phraseSwap
     PropertyAnimation {
       target: heroStatus; property: "opacity"
-      to: 0.0; duration: 180; easing.type: Easing.OutQuad
+      to: 0.0; duration: Style.duration(180); easing.type: Easing.OutQuad
     }
     ScriptAction {
       script: {
@@ -270,7 +274,7 @@ Panel {
     }
     PropertyAnimation {
       target: heroStatus; property: "opacity"
-      to: 1.0; duration: 260; easing.type: Easing.InQuad
+      to: 1.0; duration: Style.duration(260); easing.type: Easing.InQuad
     }
   }
 
@@ -355,7 +359,7 @@ Panel {
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
 
-            Behavior on color { ColorAnimation { duration: 200 } }
+            Behavior on color { ColorAnimation { duration: Style.duration(200) } }
           }
 
           Column {
@@ -402,7 +406,7 @@ Panel {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
 
-            Behavior on color { ColorAnimation { duration: 200 } }
+            Behavior on color { ColorAnimation { duration: Style.duration(200) } }
           }
         }
 
@@ -427,12 +431,12 @@ Panel {
             color: root.batteryFillColor
             width: Math.max(barTrack.height, barTrack.width * root.batteryFraction)
 
-            Behavior on width { NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
-            Behavior on color { ColorAnimation { duration: 220 } }
+            Behavior on width { NumberAnimation { duration: Style.duration(320); easing.type: Easing.OutCubic } }
+            Behavior on color { ColorAnimation { duration: Style.duration(220) } }
 
             // Subtle pulse while charging — visible signal that energy is flowing in.
             SequentialAnimation on opacity {
-              running: root.charging && !root.fullyCharged && root.opened
+              running: root.charging && !root.fullyCharged && root.opened && !Style.reduceMotion
               loops: Animation.Infinite
               alwaysRunToEnd: true
               NumberAnimation { from: 1.0; to: 0.55; duration: 950; easing.type: Easing.InOutSine }
@@ -467,8 +471,8 @@ Panel {
               value: root.chargeThresholdActive ? (root.batteryInfo.threshold || "-") : (root.batteryFlowIdle ? "-" : (root.batteryInfo.time || "—"))
             }
             InfoPair {
-              label: root.chargeThresholdActive ? "Battery state" : (root.discharging ? "Discharging" : "Charging")
-              value: root.chargeThresholdActive ? "Holding" : (root.batteryFull ? "-" : (root.batteryInfo.rate || ""))
+              label: (root.chargeThresholdActive || root.pendingCharge) ? "Battery state" : (root.discharging ? "Discharging" : "Charging")
+              value: root.chargeThresholdActive ? "Holding" : (root.pendingCharge ? "Not charging" : (root.batteryFull ? "-" : (root.batteryInfo.rate || "")))
             }
           }
         }

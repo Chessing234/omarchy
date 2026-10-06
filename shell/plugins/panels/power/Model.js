@@ -140,6 +140,7 @@ function batteryIcon(device, onBattery, states, arg4, arg5) {
 
   // Stepped battery level with superscript plus (U+207A) for charge-limit hold.
   if (holding) return defaultIcons[index] + "⁺"
+  if (!onBattery && d.state === states.PendingCharge) return defaultIcons[index]
   // battery-check (U+F17E2): charged and holding, not actively charging.
   if (d.state === states.FullyCharged) return "󱟢"
   if (!onBattery) return chargingIcons[index]
@@ -163,6 +164,7 @@ function modeLabel(device, onBattery, states, threshold) {
   // cannot see that, and the icon already reads the state, so the label has
   // to as well or the two disagree on the same battery.
   if (d.state === s.FullyCharged || percentage >= 1) return "Fully charged"
+  if (d.state === s.PendingCharge) return "Not charging"
   return "Charging"
 }
 
