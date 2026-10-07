@@ -8,14 +8,16 @@ test_tmp=$(mktemp -d)
 trap 'rm -rf "$test_tmp"' EXIT
 mkdir -p "$test_tmp/bin" "$test_tmp/home"
 
-# Decode the actual query with fontconfig itself. Only an exact installed
-# family gets returned, so a full dump or an unescaped pattern cannot pass.
+# Decode the actual query with fontconfig itself and print it as fc-list does,
+# escaped unless a format is asked for. Only an exact installed family is
+# returned, so a full dump, an unescaped pattern or escaped output cannot pass.
 cat >"$test_tmp/bin/fc-list" <<'MOCK'
 #!/bin/bash
+format='%{=fclist}\n'
+[[ ${1-} == -f ]] && format=$2 && shift 2
 [[ $# == 1 && $1 == :family=* ]] || exit 1
-family=$(fc-pattern -f '%{family}' "$1")
-[[ $family == "$TEST_FONT_FAMILY" ]] || exit 1
-printf '%s\n' "$family"
+[[ $(fc-pattern -f '%{family}' "$1") == "$TEST_FONT_FAMILY" ]] || exit 1
+fc-pattern -f "$format" "$1"
 MOCK
 for stub in omarchy-restart-shell omarchy-hook; do
   printf '#!/bin/bash\nexit 0\n' >"$test_tmp/bin/$stub"
@@ -25,7 +27,7 @@ for stub in pgrep omarchy-cmd-present; do
 done
 chmod +x "$test_tmp/bin"/*
 
-for family in "Test Mono" "Test, Mono" "Test: Mono" "Test, Mono: Style"; do
+for family in "Test Mono" "Test-Mono" "Test, Mono" "Test: Mono" "Test, Mono: Style"; do
   HOME="$test_tmp/home" PATH="$test_tmp/bin:$PATH" OMARCHY_PATH="$ROOT" \
     TEST_FONT_FAMILY="$family" "$ROOT/bin/omarchy-font-set" "$family"
   grep -Fq "<string>$family</string>" "$test_tmp/home/.config/fontconfig/fonts.conf" ||

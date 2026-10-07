@@ -31,10 +31,11 @@ if [[ $font_name == *$'\n'* || $font_name == *$'\r'* || $font_name == *['"\\`$<>
 fi
 
 # Fontconfig parses commas and colons as pattern syntax, even in a family
-# property. Escape them for lookup while keeping the written family literal.
+# property, and escapes them (and hyphens) in its default output. Escape them
+# for the query and ask for the family unescaped so it compares as written.
 fontconfig_family=${font_name//,/\\,}
 fontconfig_family=${fontconfig_family//:/\\:}
-if ! fc-list ":family=$fontconfig_family" | grep -Fqi -- "$font_name"; then
+if ! fc-list -f '%{family}\n' ":family=$fontconfig_family" | grep -Fqi -- "$font_name"; then
   echo "Font '$font_name' not found."
   exit 1
 fi
