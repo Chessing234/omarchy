@@ -1181,7 +1181,7 @@ Type=Application
 Categories=System;Virtualization;
 EOF
   chmod 644 "$stage" || return 1
-  mv -f -- "$stage" "$applications/windows-vm.desktop"
+  mv -fT -- "$stage" "$applications/windows-vm.desktop"
 )
 
 install_windows() {
