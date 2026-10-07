@@ -6,7 +6,8 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/base-test.sh"
 
 test_tmp=$(mktemp -d)
 trap 'rm -rf "$test_tmp"' EXIT
-mkdir -p "$test_tmp/bin" "$test_tmp/home"
+mkdir -p "$test_tmp/bin" "$test_tmp/home/.config/foot"
+printf 'font=Old Font:size=9\n' >"$test_tmp/home/.config/foot/foot.ini"
 
 # Decode the actual query with fontconfig itself and print it as fc-list does,
 # escaped unless a format is asked for. Only an exact installed family is
@@ -32,6 +33,9 @@ for family in "Test Mono" "Test-Mono" "Test, Mono" "Test: Mono" "Test, Mono: Sty
     TEST_FONT_FAMILY="$family" "$ROOT/bin/omarchy-font-set" "$family"
   grep -Fq "<string>$family</string>" "$test_tmp/home/.config/fontconfig/fonts.conf" ||
     fail "font-set writes the literal family after its filtered lookup" "$family"
+  foot_font=$(sed -n 's/^font=//p' "$test_tmp/home/.config/foot/foot.ini")
+  [[ $(fc-pattern -f '%{family}' "$foot_font") == "$family" ]] ||
+    fail "font-set writes a foot pattern that names the family" "$foot_font"
   pass "font-set looks up the exact family: $family"
 done
 

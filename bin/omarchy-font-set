@@ -62,7 +62,9 @@ if [[ -f ~/.config/ghostty/config ]]; then
 fi
 
 if [[ -f ~/.config/foot/foot.ini ]]; then
-  sed -i "s/^font=.*/font=$sed_font_name:size=9/g" ~/.config/foot/foot.ini
+  # Foot reads a fontconfig pattern, where -, comma and colon end the family.
+  foot_font_name=$(printf '%s' "$font_name" | sed 's/[-,:]/\\&/g; s/[\\&/]/\\&/g')
+  sed -i "s/^font=.*/font=$foot_font_name:size=9/g" ~/.config/foot/foot.ini
 fi
 
 # fontconfig is the canonical source of truth — the omarchy shell, Qt apps,
