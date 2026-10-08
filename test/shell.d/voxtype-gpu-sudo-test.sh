@@ -102,6 +102,8 @@ grep -qx 'sudo voxtype setup gpu --enable' "$calls" ||
 # ensure every gpu enable was via sudo by requiring the sudo line above.
 grep -q '^voxtype setup gpu --enable$' "$calls" ||
   fail "elevated voxtype gpu enable ran" "$(cat "$calls")"
+[[ $output != *"could not enable the Voxtype GPU backend"* ]] ||
+  fail "successful GPU enable prints no warning" "$output"
 grep -q '^notify$' "$calls" || fail "successful GPU enable still finishes install" "$output$(cat "$calls")"
 pass "Vulkan install enables the GPU backend through sudo"
 
