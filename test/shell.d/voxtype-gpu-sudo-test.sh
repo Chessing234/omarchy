@@ -7,7 +7,7 @@ set -euo pipefail
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/base-test.sh"
 
-script="$ROOT/bin/omarchy-voxtype-install"
+script="$ROOT/bin/omarchy-install-dictation-voxtype"
 test_tmp=$(mktemp -d)
 trap 'rm -rf "$test_tmp"' EXIT
 
@@ -18,6 +18,11 @@ mkdir -p "$stub_bin" "$home" "$test_tmp/omarchy/default/voxtype"
 : >"$test_tmp/omarchy/default/voxtype/config.toml"
 
 cat >"$stub_bin/gum" <<'SH'
+#!/bin/bash
+exit 0
+SH
+
+cat >"$stub_bin/omarchy-cmd-missing" <<'SH'
 #!/bin/bash
 exit 0
 SH
@@ -59,7 +64,12 @@ cat >"$stub_bin/hyprctl" <<'SH'
 exit 0
 SH
 
-cat >"$stub_bin/omarchy-restart-shell" <<'SH'
+cat >"$stub_bin/systemctl" <<'SH'
+#!/bin/bash
+exit 0
+SH
+
+cat >"$stub_bin/omarchy-dictation-use" <<'SH'
 #!/bin/bash
 exit 0
 SH
@@ -73,8 +83,11 @@ chmod +x "$stub_bin"/*
 
 run_install() {
   : >"$calls"
+  rm -rf "$home"
+  mkdir -p "$home"
   env "$@" \
     HOME="$home" \
+    XDG_CONFIG_HOME="$home/.config" \
     PATH="$stub_bin:$PATH" \
     OMARCHY_PATH="$test_tmp/omarchy" \
     CALLS="$calls" \
