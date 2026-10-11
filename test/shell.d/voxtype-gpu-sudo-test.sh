@@ -14,8 +14,11 @@ trap 'rm -rf "$test_tmp"' EXIT
 stub_bin="$test_tmp/bin"
 home="$test_tmp/home"
 calls="$test_tmp/calls"
-mkdir -p "$stub_bin" "$home" "$test_tmp/omarchy/default/voxtype"
+lib_path="$test_tmp/lib/voxtype"
+mkdir -p "$stub_bin" "$home" "$test_tmp/omarchy/default/voxtype" "$lib_path"
 : >"$test_tmp/omarchy/default/voxtype/config.toml"
+printf '#!/bin/bash\n' >"$lib_path/voxtype-vulkan"
+chmod +x "$lib_path/voxtype-vulkan"
 
 cat >"$stub_bin/gum" <<'SH'
 #!/bin/bash
@@ -90,6 +93,7 @@ run_install() {
     XDG_CONFIG_HOME="$home/.config" \
     PATH="$stub_bin:$PATH" \
     OMARCHY_PATH="$test_tmp/omarchy" \
+    OMARCHY_VOXTYPE_LIB_PATH="$lib_path" \
     CALLS="$calls" \
     bash "$script"
 }
