@@ -174,6 +174,8 @@ pass "a primary home signed in to another subscription doesn't inherit its limit
 work_cache_key=$(python3 -c 'import hashlib, sys; print(hashlib.sha1(sys.argv[1].encode()).hexdigest()[:16])' "$accounts/claude/work")
 jq -nc --arg open "$open_at" --argjson now "$(( $(date +%s) * 1000 ))" '{fetchedAtMs: $now, limits: [{label: "Session (5-hour)", percent: 0.66, resetsAt: $open}]}' \
   >"$XDG_CACHE_HOME/omarchy/agent-usage/claude-limits-$work_cache_key.json"
+jq -nc --arg open "$open_at" --argjson now "$(( $(date +%s) * 1000 ))" '{fetchedAtMs: $now, limits: [{label: "Session (5-hour)", percent: 0.21, resetsAt: $open}]}' \
+  >"$primary_cache"
 inherited=$(CLAUDE_CONFIG_DIR="$accounts/claude/work" COLLECTOR="$ROOT/bin/omarchy-agent-usage-claude" python3 - <<'PY'
 import importlib.machinery, importlib.util, io, json, os, sys
 
@@ -194,7 +196,7 @@ sys.argv = ["omarchy-agent-usage-claude", "--force"]
 collector.main()
 PY
 )
-[[ $(jq -c '.accounts[0].limits | map(.percent)' <<<"$inherited") != *0.66* ]] ||
+[[ $(jq -c '.accounts[0].limits[0].percent' <<<"$inherited") == 0.21 ]] ||
   fail "a primary home keeps its own limits cache under an inherited CLAUDE_CONFIG_DIR" "$inherited"
 pass "a primary home keeps its own limits cache under an inherited CLAUDE_CONFIG_DIR"
 
