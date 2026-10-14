@@ -1207,9 +1207,10 @@ def account_limits(account: dict[str, Any], force: bool) -> dict[str, Any]:
   key = re.sub(r"[^A-Za-z0-9_-]", "", identity or str(account.get("accountId") or "")) or account["id"]
   # The primary home is keyed the same way once it says who it's signed in
   # as, so signing it in to another subscription never inherits the last
-  # one's numbers; until then it keeps the single-account cache.
+  # one's numbers; until then it keeps the single-account cache of its own
+  # home, never that of whatever CLAUDE_CONFIG_DIR the collector inherited.
   if account.get("primary") and not identity:
-    cache_name = "claude-limits.json"
+    cache_name = f"claude-limits-{hashlib.sha1(str(home).encode('utf-8')).hexdigest()[:16]}.json"
   else:
     cache_name = f"claude-limits-{key}.json"
   limits = collect_limits(access_token, expires_at_ms, refresh_expires_at_ms, force, cache_name)
