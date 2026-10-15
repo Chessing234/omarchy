@@ -34,10 +34,12 @@ EOF
 cat >"$mock_path/systemctl" <<'EOF'
 #!/bin/bash
 printf 'systemctl %s\n' "$*" >>"$TEST_TMP/calls"
-if [[ $* == "list-unit-files --no-legend tailscaled.service" ]]; then
+if [[ $* == "show --property=LoadState --value tailscaled.service" ]]; then
   [[ ${UNIT_QUERY_FAIL:-} != 1 ]] || exit 2
-  if [[ ${UNIT_MISSING:-} != 1 ]]; then
-    printf 'tailscaled.service enabled enabled\n'
+  if [[ ${UNIT_MISSING:-} == 1 ]]; then
+    echo not-found
+  else
+    echo loaded
   fi
 fi
 EOF
@@ -85,7 +87,7 @@ pass "sudo policy failure remains an error, not cancellation"
 status=0
 SUDO_FAIL=0 run_remove || status=$?
 (( status == 0 )) || fail "authenticated sudo removes Tailscale" "status=$status"
-expected=$'sudo true\nsystemctl list-unit-files --no-legend tailscaled.service\ntailscale down\nsystemctl --user disable --now omarchy-tailscale-receive.service\nsudo systemctl disable --now tailscaled.service\nplugin-disable omarchy.tailscale\nwebapp-remove Tailscale\npkg-drop tailscale'
+expected=$'sudo true\nsystemctl show --property=LoadState --value tailscaled.service\ntailscale down\nsystemctl --user disable --now omarchy-tailscale-receive.service\nsudo systemctl disable --now tailscaled.service\nplugin-disable omarchy.tailscale\nwebapp-remove Tailscale\npkg-drop tailscale'
 [[ $(<"$test_tmp/calls") == "$expected" ]] || fail "authenticated sudo tears Tailscale down in order" "$(<"$test_tmp/calls")"
 grep -qx 'Tailscale has been removed.' "$test_tmp/out" || fail "authenticated sudo reports Tailscale was removed" "$(<"$test_tmp/out")"
 pass "authenticated sudo removes Tailscale"
@@ -117,5 +119,5 @@ pass "daemon disable failure is exercised after successful authentication"
 status=0
 UNIT_QUERY_FAIL=1 run_remove || status=$?
 (( status == 2 )) || fail "unit lookup failure keeps its error status" "status=$status"
-[[ $(<"$test_tmp/calls") == $'sudo true\nsystemctl list-unit-files --no-legend tailscaled.service' ]] || fail "lookup failure must stop before teardown"
+[[ $(<"$test_tmp/calls") == $'sudo true\nsystemctl show --property=LoadState --value tailscaled.service' ]] || fail "lookup failure must stop before teardown"
 pass "unit lookup errors stop before teardown"

@@ -12,12 +12,12 @@ sudo true
 trap - INT
 
 # A package can remain installed after its service file has gone. Query before
-# teardown so lookup errors remain visible, while an absent unit needs no disable.
-daemon_unit=$(systemctl list-unit-files --no-legend tailscaled.service)
+# teardown so lookup errors remain visible; show reports an absent unit as not-found and exits 0.
+daemon_load=$(systemctl show --property=LoadState --value tailscaled.service)
 
 tailscale down 2>/dev/null || true
 systemctl --user disable --now omarchy-tailscale-receive.service 2>/dev/null || true
-if [[ -n $daemon_unit ]]; then
+if [[ $daemon_load != not-found ]]; then
   sudo systemctl disable --now tailscaled.service
 fi
 omarchy-plugin-disable omarchy.tailscale || true
