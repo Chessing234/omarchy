@@ -58,6 +58,7 @@ current_items() {
   hyprctl clients -j 2>/dev/null | jq -r '
     [ .[]
       | select((.class // "") != "")
+      | select(.class != "org.omarchy.screensaver" and .class != "hyprlock" and (.class | startswith("org.omarchy.lock") | not))
       | "\( (.class | gsub("[, \t]"; "_")) )@\( ((.workspace.name // "1") | tostring | gsub("[, \t]"; "_")) )"
     ]
     | unique
@@ -72,8 +73,14 @@ active_class() {
 record_event() {
   local class="$1" epoch last_epoch last_class
   sense_enabled || return 0
-  excluded_class "$class" && return 0
   [[ -n $class ]] || return 0
+
+  # The screensaver and lock screen are not focus, but they are information:
+  # as an __away__ marker they end the previous app's stretch, so a break is
+  # never counted as focused work in that app.
+  if excluded_class "$class"; then
+    class="__away__"
+  fi
 
   epoch=$(now_epoch)
   if [[ -f $EVENTS_FILE ]]; then
@@ -83,6 +90,7 @@ record_event() {
     if [[ $last_class == "$class" ]] && (( epoch - ${last_epoch:-0} < 5 )); then
       return 0
     fi
+    [[ $last_class == "$class" && $class == "__away__" ]] && return 0
   fi
 
   mkdir -p "$SENSE_DIR"
@@ -206,7 +214,7 @@ flow_report() {
   epoch=$(now_epoch)
 
   if [[ ! -f $EVENTS_FILE ]]; then
-    printf 'learning\t0\t0\t\t0\t\t0\n'
+    printf 'learning\t0\t0\t-\t0\t-\t0\n'
     return 0
   fi
 
@@ -214,7 +222,7 @@ flow_report() {
     {
       epochs[++total] = $1
       classes[total] = $2
-      if ($1 >= now - window) {
+      if ($1 >= now - window && $2 != "__away__") {
         switches++
         distinct[$2] = 1
       }
@@ -236,6 +244,7 @@ flow_report() {
         if (end > now) end = now
         dur = end - start
         if (dur < 0) dur = 0
+        if (classes[i] == "__away__") continue
         seconds[classes[i]] += dur
         if (dur > longest) longest = dur
       }
@@ -244,9 +253,15 @@ flow_report() {
       }
 
       dwell = (last_epoch == "") ? window + 1 : now - last_epoch
+      if (last_class == "") last_class = "-"
+      if (top_class == "") top_class = "-"
 
+      # Idle means away, not merely quiet: an hour with no focus event at
+      # all, or the screensaver/lock marker as the latest event. A long
+      # unbroken stretch in one app stays flow; it does not decay into idle
+      # just for lasting.
       if (total < 8) state = "learning"
-      else if (dwell > window) state = "idle"
+      else if (last_class == "__away__" || dwell > 3600) state = "idle"
       else if (switches >= 12 && distinct_count >= 4) state = "scattered"
       else if (longest >= 300 && switches <= 8) state = "flow"
       else state = "settling"
@@ -282,8 +297,12 @@ restore_guardian_dnd() {
   [[ -f $GUARDIAN_FILE ]] || return 0
   local previous
   previous=$(cut -f2 "$GUARDIAN_FILE")
-  omarchy-shell notifications setDnd "$previous" >/dev/null 2>&1 || true
-  rm -f "$GUARDIAN_FILE"
+  # Keep the marker when the restore does not land (the shell may be
+  # restarting); the next guard pass retries instead of forgetting that
+  # notifications are silenced because of sense.
+  if omarchy-shell notifications setDnd "$previous" >/dev/null 2>&1; then
+    rm -f "$GUARDIAN_FILE"
+  fi
 }
 
 guardian_guard() {
@@ -342,12 +361,17 @@ scene_apply() {
   local clients moved=0 missing="" item class workspace address current_ws main_ws="" fallback_ws=""
   clients=$(hyprctl clients -j 2>/dev/null || printf '[]')
 
+  # A scene can hold the same class on two workspaces (two terminals), so
+  # each window may only be assigned to one scene slot.
+  local used_json='[]'
   local -a core_items
   IFS=',' read -ra core_items <<<"$core"
   for item in "${core_items[@]}"; do
     class=${item%@*}
     workspace=${item##*@}
-    address=$(jq -r --arg c "$class" '[.[] | select(.class == $c)][0].address // ""' <<<"$clients")
+    address=$(jq -r --arg c "$class" --argjson used "$used_json" \
+      '[.[] | select(.class == $c) | select(.address as $a | $used | index($a) | not)][0].address // ""' <<<"$clients")
+    [[ -n $address ]] && used_json=$(jq -c --arg a "$address" '. + [$a]' <<<"$used_json")
     if [[ -z $address ]]; then
       missing="$missing $class"
       continue
@@ -407,7 +431,9 @@ watch_events() {
           guardian_guard >/dev/null 2>&1 || true
         fi
         ;;
-      openwindow\>\>* | closewindow\>\>*)
+      openwindow\>\>* | closewindow\>\>* | movewindow\>\>* | movewindowv2\>\>*)
+        # Sampling moves as well as opens means the layout a user settles
+        # into by hand is learned, not just the one windows opened with.
         record_snapshot
         ;;
     esac
@@ -440,6 +466,10 @@ case "${1:-status}" in
     record_snapshot
     class=$(active_class)
     [[ -n $class ]] && record_event "$class"
+    # The session watcher exited at login while sense was off, so enabling
+    # has to start one. It flock-guards itself, and exits at once when no
+    # compositor socket exists.
+    setsid "${BASH_SOURCE[0]}" watch >/dev/null 2>&1 </dev/null &
     printf 'sense is learning. it only records window classes and workspaces, locally in %s\n' "${SENSE_DIR/#$HOME/~}"
     printf 'give it a few days, then run: omarchy sense scenes\n'
     ;;
