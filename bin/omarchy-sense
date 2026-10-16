@@ -2,8 +2,8 @@
 
 # omarchy:summary=Learn your scenes and protect your flow, locally
 # omarchy:group=sense
-# omarchy:args=[status|enable|disable|scenes|apply <scene>|flow|guard|why|snapshot|forget|watch]
-# omarchy:examples=omarchy sense scenes | omarchy sense apply morning-ghostty | omarchy sense flow
+# omarchy:args=[status|enable|disable|scenes|apply <scene>|routines|routine <routine>|routine dismiss <routine>|flow|guard|why|snapshot|forget|watch]
+# omarchy:examples=omarchy sense scenes | omarchy sense apply morning-ghostty | omarchy sense routines | omarchy sense routine ghostty-to-firefox | omarchy sense flow
 
 set -uo pipefail
 
@@ -19,8 +19,12 @@ EVENTS_FILE="$SENSE_DIR/events.tsv"
 SNAPSHOTS_FILE="$SENSE_DIR/snapshots.tsv"
 ENABLED_FILE="$SENSE_DIR/enabled"
 GUARDIAN_FILE="$SENSE_DIR/guardian-dnd"
+KNOWN_ROUTINES_FILE="$SENSE_DIR/known-routines"
+DISMISSED_ROUTINES_FILE="$SENSE_DIR/dismissed-routines"
 
 MIN_SCENE_SNAPSHOTS="${OMARCHY_SENSE_MIN_SCENE_SNAPSHOTS:-3}"
+MIN_ROUTINE_SESSIONS="${OMARCHY_SENSE_MIN_ROUTINE_SESSIONS:-3}"
+MIN_ROUTINE_DAYS="${OMARCHY_SENSE_MIN_ROUTINE_DAYS:-2}"
 MIN_SCENE_DAYS="${OMARCHY_SENSE_MIN_SCENE_DAYS:-2}"
 FLOW_WINDOW_SECONDS="${OMARCHY_SENSE_FLOW_WINDOW:-900}"
 
@@ -283,6 +287,189 @@ flow_sentence() {
     *) printf 'settling (%s switches in the last 15m)\n' "$switches" ;;
   esac
 }
+# A routine is a scene with an order: the same focus sequence (terminal ->
+# editor -> browser -> back) recurring across sessions and days. Sessions are
+# focus events split at away markers and gaps over ten minutes. Candidates
+# are length 3-5 sequences; a shorter one is dropped when a longer one
+# containing it happened just as often, so you get the full habit, not its
+# fragments.
+discover_routines() {
+  [[ -f $EVENTS_FILE ]] || return 0
+
+  awk -F '\t' -v min_sessions="$MIN_ROUTINE_SESSIONS" -v min_days="$MIN_ROUTINE_DAYS" '
+    {
+      epoch = $1; cls = $2
+      if (cls == "__away__") { in_session = 0; last = epoch; next }
+      if (!in_session || epoch - last > 600) {
+        session++
+        sday[session] = int(epoch / 86400)
+        in_session = 1
+      }
+      last = epoch
+      if (slen[session] == 0 || scls[session SUBSEP slen[session]] != cls) {
+        slen[session]++
+        scls[session SUBSEP slen[session]] = cls
+      }
+    }
+    END {
+      for (s = 1; s <= session; s++) {
+        if (slen[s] < 3) continue
+        for (n = 3; n <= 5 && n <= slen[s]; n++) {
+          for (i = 1; i + n - 1 <= slen[s]; i++) {
+            gram = scls[s SUBSEP i]
+            for (j = i + 1; j < i + n; j++) gram = gram "," scls[s SUBSEP j]
+            if (!((gram SUBSEP s) in seen)) {
+              seen[gram SUBSEP s] = 1
+              support[gram]++
+              grams[gram] = 1
+              if (!((gram SUBSEP sday[s]) in dseen)) {
+                dseen[gram SUBSEP sday[s]] = 1
+                days[gram]++
+              }
+            }
+          }
+        }
+      }
+      for (gram in grams) {
+        if (support[gram] >= min_sessions && days[gram] >= min_days) {
+          n = split(gram, parts, ",")
+          printf "%d\t%d\t%d\t%s\n", n, support[gram], days[gram], gram
+        }
+      }
+    }
+  ' "$EVENTS_FILE" | sort -t "$(printf '\t')" -k1,1nr -k2,2nr -k4,4 | awk -F '\t' '
+    function short_name(item,   n, parts) {
+      n = split(item, parts, ".")
+      item = tolower(parts[n])
+      gsub(/[^a-z0-9-]/, "-", item)
+      return item
+    }
+    {
+      n = $1; support = $2; days = $3; gram = $4
+      wrapped = "," gram ","
+      skip = 0
+      for (k = 1; k <= kept; k++) {
+        if (kept_support[k] == support && index(kept_wrapped[k], wrapped) > 0) { skip = 1; break }
+      }
+      if (skip) next
+      kept++
+      kept_wrapped[kept] = wrapped
+      kept_support[kept] = support
+
+      split(gram, parts, ",")
+      name = short_name(parts[1]) "-to-" short_name(parts[n])
+      if (name in used_name) {
+        used_name[name]++
+        name = name "-" used_name[name]
+      } else {
+        used_name[name] = 1
+      }
+      printf "%s\t%d\t%d\t%s\n", name, support, days, gram
+    }
+  '
+}
+
+routines_list() {
+  local name support days seq
+  while IFS="$(printf '\t')" read -r name support days seq; do
+    [[ -n $name ]] || continue
+    if [[ -f $DISMISSED_ROUTINES_FILE ]] && grep -qxF "$seq" "$DISMISSED_ROUTINES_FILE"; then
+      continue
+    fi
+    printf '%s\t%s\t%s\t%s\n' "$name" "$support" "$days" "$seq"
+  done <<<"$(discover_routines)"
+}
+
+routine_signature() {
+  local wanted="$1" name support days seq index=0
+  while IFS="$(printf '\t')" read -r name support days seq; do
+    [[ -n $name ]] || continue
+    index=$(( index + 1 ))
+    if [[ $wanted == "$name" || $wanted == "$index" ]]; then
+      printf '%s\t%s\n' "$name" "$seq"
+      return 0
+    fi
+  done <<<"$(routines_list)"
+  return 1
+}
+
+modal_workspace() {
+  [[ -f $SNAPSHOTS_FILE ]] || return 0
+  awk -F '\t' -v target="$1" '
+    {
+      n = split($4, items, ",")
+      for (i = 1; i <= n; i++) {
+        split(items[i], kv, "@")
+        if (kv[1] == target) hits[kv[2]]++
+      }
+    }
+    END {
+      best = ""; best_hits = -1
+      for (w in hits) {
+        if (hits[w] > best_hits || (hits[w] == best_hits && w < best)) { best = w; best_hits = hits[w] }
+      }
+      printf "%s\n", best
+    }
+  ' "$SNAPSHOTS_FILE"
+}
+
+check_new_routines() {
+  sense_enabled || return 0
+
+  # First sight of the file is a baseline: what already qualifies is noted
+  # silently, so the offer only ever fires for routines learned from now on.
+  if [[ ! -f $KNOWN_ROUTINES_FILE ]]; then
+    mkdir -p "$SENSE_DIR"
+    routines_list | cut -f4 >"$KNOWN_ROUTINES_FILE"
+    return 0
+  fi
+
+  local name support days seq
+  while IFS="$(printf '\t')" read -r name support days seq; do
+    [[ -n $name ]] || continue
+    grep -qxF "$seq" "$KNOWN_ROUTINES_FILE" && continue
+    printf '%s\n' "$seq" >>"$KNOWN_ROUTINES_FILE"
+    printf 'new routine learned: %s (%s). replay it with: omarchy sense routine %s\n' \
+      "$name" "${seq//,/ -> }" "$name"
+    omarchy-notification-send "New routine learned" "$name. Replay: omarchy sense routine $name" || true
+  done <<<"$(routines_list)"
+}
+
+routine_run() {
+  local wanted="$1" found name seq
+  [[ -n $wanted ]] || { echo "Usage: omarchy sense routine <routine>" >&2; return 1; }
+
+  found=$(routine_signature "$wanted") || {
+    echo "No learned routine named $wanted yet. Run: omarchy sense routines" >&2
+    return 1
+  }
+  name=${found%%$'\t'*}
+  seq=${found##*$'\t'}
+
+  local clients class address workspace current_ws stepped=0 skipped=""
+  clients=$(hyprctl clients -j 2>/dev/null || printf '[]')
+  local -a steps
+  IFS=',' read -ra steps <<<"$seq"
+  for class in "${steps[@]}"; do
+    address=$(jq -r --arg c "$class" '[.[] | select(.class == $c)][0].address // ""' <<<"$clients")
+    if [[ -z $address ]]; then
+      skipped="$skipped $class"
+      continue
+    fi
+    workspace=$(modal_workspace "$class")
+    if [[ -n $workspace ]]; then
+      current_ws=$(jq -r --arg a "$address" '[.[] | select(.address == $a)][0].workspace.name // "" | tostring' <<<"$clients")
+      if [[ $current_ws != "$workspace" ]]; then
+        hyprctl dispatch movetoworkspacesilent "$workspace,address:$address" >/dev/null 2>&1 || true
+      fi
+    fi
+    omarchy-hyprland-focus-app "$class" >/dev/null 2>&1 || true
+    stepped=$(( stepped + 1 ))
+  done
+
+  printf 'routine %s: walked %s step(s)\n' "$name" "$stepped"
+  [[ -z $skipped ]] || printf 'not open right now:%s\n' "$skipped"
+}
 
 dnd_state() {
   local state
@@ -417,6 +604,7 @@ watch_events() {
     # local log once in a while. This never queries the compositor.
     if (( rc > 128 )); then
       guardian_guard >/dev/null 2>&1 || true
+      check_new_routines >/dev/null 2>&1 || true
       continue
     fi
     (( rc == 0 )) || break
@@ -450,6 +638,9 @@ Usage: omarchy-sense <command>
   disable    Stop learning and restore anything sense silenced
   scenes     Scenes discovered from your recurring window layouts
   apply <s>  Move open windows back to a scene's usual workspaces
+  routines   Ordered routines sense has seen you repeat
+  routine <r> Walk a routine: each app to its usual workspace, in order
+  routine dismiss <r> Stop suggesting a routine
   flow       Your current focus state, with the numbers behind it
   guard      Silence notifications while you are in flow, restore after
   why        Explain the current flow state and scene match
@@ -466,6 +657,7 @@ case "${1:-status}" in
     record_snapshot
     class=$(active_class)
     [[ -n $class ]] && record_event "$class"
+    check_new_routines
     # The session watcher exited at login while sense was off, so enabling
     # has to start one. It flock-guards itself, and exits at once when no
     # compositor socket exists.
@@ -484,7 +676,8 @@ case "${1:-status}" in
     [[ -f $EVENTS_FILE ]] && event_count=$(wc -l <"$EVENTS_FILE" | tr -d ' ')
     [[ -f $SNAPSHOTS_FILE ]] && snapshot_count=$(wc -l <"$SNAPSHOTS_FILE" | tr -d ' ')
     scene_count=$(discover_scenes | grep -c . || true)
-    printf 'focus events: %s, layout snapshots: %s, scenes learned: %s\n' "$event_count" "$snapshot_count" "$scene_count"
+    routine_count=$(routines_list | grep -c . || true)
+    printf 'focus events: %s, layout snapshots: %s, scenes learned: %s, routines learned: %s\n' "$event_count" "$snapshot_count" "$scene_count" "$routine_count"
     printf 'flow: %s\n' "$(flow_sentence)"
     ;;
   scenes)
@@ -510,6 +703,42 @@ case "${1:-status}" in
         done <<<"$(printf '%s\n' "${items[@]}" | sort)"
       done <<<"$(discover_scenes)"
       (( found )) || printf 'no scenes yet. sense needs the same layout on at least %s different days\n' "$MIN_SCENE_DAYS"
+    fi
+    ;;
+  routines)
+    if [[ ${2:-} == "--json" ]]; then
+      json='[]'
+      while IFS="$(printf '\t')" read -r name support days seq; do
+        [[ -n $name ]] || continue
+        json=$(jq -c --arg name "$name" --argjson seen "$support" --argjson days "$days" --arg seq "$seq" \
+          '. + [{name: $name, seen: $seen, days: $days, steps: ($seq | split(","))}]' <<<"$json")
+      done <<<"$(routines_list)"
+      printf '%s\n' "$json"
+    else
+      found=0
+      while IFS="$(printf '\t')" read -r name support days seq; do
+        [[ -n $name ]] || continue
+        found=1
+        printf '%s  (seen %sx over %s days)\n  %s\n' "$name" "$support" "$days" "${seq//,/ -> }"
+      done <<<"$(routines_list)"
+      if (( found )); then
+        printf 'replay one with: omarchy sense routine <name>. dismiss one with: omarchy sense routine dismiss <name>\n'
+      else
+        printf 'no routines yet. sense needs the same sequence of apps on at least %s different days\n' "$MIN_ROUTINE_DAYS"
+      fi
+    fi
+    ;;
+  routine)
+    if [[ ${2:-} == "dismiss" ]]; then
+      found=$(routine_signature "${3:-}") || {
+        echo "No learned routine named ${3:-} yet. Run: omarchy sense routines" >&2
+        exit 1
+      }
+      mkdir -p "$SENSE_DIR"
+      printf '%s\n' "${found##*$'\t'}" >>"$DISMISSED_ROUTINES_FILE"
+      printf 'dismissed. sense will not suggest %s again\n' "${found%%$'\t'*}"
+    else
+      routine_run "${2:-}"
     fi
     ;;
   apply)
