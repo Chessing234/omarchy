@@ -955,6 +955,36 @@ sense_flow=$(sense_run 1760516320 flow)
 sense_run 1760516320 guard >/dev/null
 [[ -f $sense_home/.sense-dnd ]] && fail "sense restores notifications after flow"
 
+# Two windows of the same class in one scene each get their own slot.
+printf '1760259600\t2025-10-12\t09\tcode@3,firefox@4,ghostty@1,ghostty@2\n1760346000\t2025-10-13\t09\tcode@3,firefox@4,ghostty@1,ghostty@2\n1760432400\t2025-10-14\t09\tcode@3,firefox@4,ghostty@1,ghostty@2\n' >"$sense_state/snapshots.tsv"
+cat >"$sense_home/clients.json" <<'JSON'
+[{"address":"0x1","class":"ghostty","workspace":{"id":4,"name":"4"}},
+ {"address":"0x9","class":"ghostty","workspace":{"id":3,"name":"3"}},
+ {"address":"0x2","class":"code","workspace":{"id":1,"name":"1"}},
+ {"address":"0x3","class":"firefox","workspace":{"id":2,"name":"2"}}]
+JSON
+: >"$sense_home/hypr.log"
+sense_run 1760515200 apply 1 >/dev/null
+grep -q "movetoworkspacesilent 1,address:0x1" "$sense_home/hypr.log" || fail "sense gives the first same-class window its own scene slot"
+grep -q "movetoworkspacesilent 2,address:0x9" "$sense_home/hypr.log" || fail "sense gives the second same-class window its own scene slot"
+
+# Flow JSON works before any history exists.
+sense_empty_json=$(env HOME="$sense_home" OMARCHY_SENSE_STATE_DIR="$sense_home/empty" OMARCHY_SENSE_NOW=1760515200 PATH="$sense_bin:$ROOT/bin:$PATH" "$ROOT/bin/omarchy-sense" flow --json)
+[[ $sense_empty_json == *'"state": "learning"'* ]] || fail "sense flow json works with no history" "$sense_empty_json"
+
+# A break marked __away__ is idle, not a long stretch in the previous app,
+# while 30 unbroken minutes in one app is still flow.
+: >"$sense_state/events.tsv"
+for i in 0 1 2 3 4 5 6 7; do printf '%s\tghostty\n' $(( 1760510000 + i * 60 )) >>"$sense_state/events.tsv"; done
+printf '1760511000\tcode\n1760512800\t__away__\n' >>"$sense_state/events.tsv"
+sense_flow=$(sense_run 1760512860 flow)
+[[ $sense_flow == "idle"* ]] || fail "sense reads the away marker as idle" "$sense_flow"
+: >"$sense_state/events.tsv"
+for i in 0 1 2 3 4 5 6 7; do printf '%s\tghostty\n' $(( 1760510000 + i * 60 )) >>"$sense_state/events.tsv"; done
+printf '1760511000\tcode\n' >>"$sense_state/events.tsv"
+sense_flow=$(sense_run 1760512860 flow)
+[[ $sense_flow == "in flow"* ]] || fail "sense keeps a long unbroken stretch in flow" "$sense_flow"
+
 # Learning nothing while disabled, and forgetting on request.
 sense_run 1760516320 disable >/dev/null
 [[ -f $sense_state/enabled ]] && fail "sense disable stops learning"
