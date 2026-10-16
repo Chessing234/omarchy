@@ -55,6 +55,7 @@
   // Trigger
   "trigger.sense": {"icon":"󰧑","label":"Sense"},
   "trigger.sense.scenes": {"icon":"󰀻","label":"Learned Scenes","action":"omarchy-launch-floating-terminal-with-presentation 'omarchy-sense scenes'"},
+  "trigger.sense.routines": {"icon":"󰀻","label":"Learned Routines","action":"omarchy-launch-floating-terminal-with-presentation 'omarchy-sense routines'"},
   "trigger.sense.flow": {"icon":"󰧑","label":"Flow State","action":"omarchy-launch-floating-terminal-with-presentation 'omarchy-sense why'"},
   "trigger.sense.enable": {"icon":"󰧑","label":"Start Learning","action":"omarchy-sense enable"},
   "trigger.sense.disable": {"icon":"󰧑","label":"Stop Learning","action":"omarchy-sense disable"},
