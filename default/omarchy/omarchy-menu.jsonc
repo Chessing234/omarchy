@@ -53,6 +53,12 @@
   "learn.community": {"icon":"󰙯","label":"Community","action":"omarchy-launch-discord-community"},
 
   // Trigger
+  "trigger.sense": {"icon":"󰧑","label":"Sense"},
+  "trigger.sense.scenes": {"icon":"󰀻","label":"Learned Scenes","action":"omarchy-launch-floating-terminal-with-presentation 'omarchy-sense scenes'"},
+  "trigger.sense.flow": {"icon":"󰧑","label":"Flow State","action":"omarchy-launch-floating-terminal-with-presentation 'omarchy-sense why'"},
+  "trigger.sense.enable": {"icon":"󰧑","label":"Start Learning","action":"omarchy-sense enable"},
+  "trigger.sense.disable": {"icon":"󰧑","label":"Stop Learning","action":"omarchy-sense disable"},
+  "trigger.sense.forget": {"icon":"󰧑","label":"Forget Everything Learned","action":"omarchy-sense forget"},
   "trigger.appearance": {"icon":"󰏘","label":"Appearance"},
   "trigger.appearance.animations": {"icon":"󰗘","label":"Animations","action":"omarchy-toggle-animations"},
   "trigger.appearance.top-bar": {"icon":"󰍜","label":"Menu Bar"},
