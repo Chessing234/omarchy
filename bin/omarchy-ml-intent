@@ -1,10 +1,105 @@
 #!/bin/bash
 
 # omarchy:summary=Run an existing menu action from a sentence
-# omarchy:args=[--print] [sentence...]
-# omarchy:examples=omarchy ml intent --print dim the laptop screen | omarchy ml intent shot the left monitor
+# omarchy:args=[--print] [sentence...] | teach <sentence> -- <command> | notes [directory]
+# omarchy:examples=omarchy ml intent --print dim the laptop screen | omarchy ml intent teach "evening mode" -- omarchy-brightness-display 10%- | omarchy ml intent notes ~/Notes
 
 set -euo pipefail
+
+intents_file() {
+  printf '%s/omarchy/ml/intents.json' "${XDG_CONFIG_HOME:-$HOME/.config}"
+}
+
+prompt_line() {
+  local placeholder=$1
+  local value=""
+  if [[ -t 0 ]] && omarchy-cmd-present gum; then
+    value=$(gum input --placeholder "$placeholder")
+  elif [[ ! -t 0 ]]; then
+    IFS= read -r value || true
+  fi
+  printf '%s' "$value"
+}
+
+if [[ ${1:-} == "teach" ]]; then
+  shift
+  sentence=${1:-}
+  if [[ -n $sentence ]]; then
+    shift
+  fi
+  if [[ ${1:-} == "--" ]]; then
+    shift
+  fi
+  command="$*"
+  if [[ -z $sentence ]]; then
+    sentence=$(prompt_line "evening mode")
+  fi
+  if [[ -z $command ]]; then
+    command=$(prompt_line "omarchy-brightness-display 10%-")
+  fi
+  if [[ -z $sentence || -z $command ]]; then
+    echo "Usage: omarchy ml intent teach <sentence> -- <command>" >&2
+    exit 1
+  fi
+  python3 - "$sentence" "$command" "$(intents_file)" <<'PY'
+import json
+import os
+import sys
+
+sentence, command, path = sys.argv[1:]
+os.makedirs(os.path.dirname(path), exist_ok=True)
+data = {"phrases": []}
+if os.path.isfile(path):
+    with open(path, encoding="utf-8") as handle:
+        loaded = json.load(handle)
+    if isinstance(loaded, dict):
+        data = loaded
+phrases = []
+for row in data.get("phrases") or []:
+    if isinstance(row, dict) and str(row.get("match") or "").lower() == sentence.lower():
+        continue
+    phrases.append(row)
+phrases.append({"match": sentence, "run": command})
+data["phrases"] = phrases
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(data, handle, indent=2)
+    handle.write("\n")
+print(sentence)
+PY
+  exit 0
+fi
+
+if [[ ${1:-} == "notes" ]]; then
+  shift
+  directory=${1:-}
+  if [[ -z $directory ]]; then
+    directory=$(prompt_line "$HOME/Notes")
+  fi
+  if [[ -z $directory ]]; then
+    echo "Usage: omarchy ml intent notes [directory]" >&2
+    exit 1
+  fi
+  python3 - "$directory" "$(intents_file)" <<'PY'
+import json
+import os
+import sys
+
+directory, path = sys.argv[1:]
+os.makedirs(os.path.dirname(path), exist_ok=True)
+data = {}
+if os.path.isfile(path):
+    with open(path, encoding="utf-8") as handle:
+        loaded = json.load(handle)
+    if isinstance(loaded, dict):
+        data = loaded
+data["notes"] = directory
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(data, handle, indent=2)
+    handle.write("\n")
+print(directory)
+PY
+  exit 0
+fi
 
 print_only=0
 if [[ ${1:-} == "--print" ]]; then
@@ -76,8 +171,41 @@ def tokens(text):
             extra.extend(["screenshot", "capture"])
     return [word for word in words + extra if word not in STOP and len(word) > 1]
 
+def intents_path():
+    root = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+    return os.path.join(root, "omarchy", "ml", "intents.json")
+
+def load_intents():
+    path = intents_path()
+    if not os.path.isfile(path):
+        return {}
+    with open(path, encoding="utf-8") as handle:
+        data = json.load(handle)
+    return data if isinstance(data, dict) else {}
+
+def user_phrase(query):
+    lowered = query.lower()
+    best = ""
+    best_len = 0
+    for row in load_intents().get("phrases") or []:
+        if not isinstance(row, dict):
+            continue
+        match = str(row.get("match") or "").strip()
+        run = str(row.get("run") or "").strip()
+        if not match or not run:
+            continue
+        if match.lower() in lowered and len(match) > best_len:
+            best = run
+            best_len = len(match)
+    return best
+
 def yesterdays_note():
-    root = os.environ.get("OMARCHY_ML_NOTES") or os.path.join(os.path.expanduser("~"), "Notes")
+    override = os.environ.get("OMARCHY_ML_NOTES")
+    if override:
+        root = override
+    else:
+        configured = load_intents().get("notes")
+        root = os.path.expanduser(str(configured)) if configured else os.path.join(os.path.expanduser("~"), "Notes")
     if not os.path.isdir(root):
         return None
     today = os.environ.get("OMARCHY_ML_TODAY")
@@ -142,7 +270,7 @@ if not query:
     print("Say what you want done.", file=sys.stderr)
     sys.exit(1)
 
-command = phrase_command(query)
+command = user_phrase(query) or phrase_command(query)
 if command is None:
     sys.exit(1)
 if command == "":

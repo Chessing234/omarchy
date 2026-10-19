@@ -153,6 +153,8 @@
   "trigger.transcode": {"icon":"󰧸","label":"Transcode","action":"omarchy-transcode"},
   "trigger.ml": {"icon":"󱚤","label":"Machine Learning"},
   "trigger.ml.intent": {"icon":"","label":"Run by asking","action":"omarchy-ml-intent"},
+  "trigger.ml.teach": {"icon":"","label":"Teach a phrase","action":"omarchy-launch-floating-terminal-with-presentation 'omarchy-ml-intent teach'"},
+  "trigger.ml.notes": {"icon":"","label":"Notes folder","action":"omarchy-launch-floating-terminal-with-presentation 'omarchy-ml-intent notes'"},
   "trigger.ml.fold": {"icon":"󰂛","label":"Fold notifications","action":"omarchy-ml-notify-fold --notify"},
   "trigger.ml.search": {"icon":"","label":"Search screenshots","action":"omarchy-ml-shot search"},
   "trigger.ml.restore": {"icon":"󰝥","label":"Restore workspace","action":"omarchy-ml-workspace restore"},
