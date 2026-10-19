@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # omarchy:summary=Index screenshots and find one by color, words, or day
-# omarchy:args=<index|search|index-latest> [options]
-# omarchy:examples=omarchy ml shot search red error from Tuesday | omarchy ml shot index --path shot.png --text error --colors red
+# omarchy:args=<index|search|index-latest|tag|ignore|save|saved> [options]
+# omarchy:examples=omarchy ml shot search red error from Tuesday | omarchy ml shot tag shot.png login bug | omarchy ml shot save login-bug red error from Tuesday
 
 set -euo pipefail
 
@@ -52,6 +52,38 @@ def state_dir():
 
 def index_path():
     return os.environ.get("OMARCHY_ML_SHOT_INDEX") or os.path.join(state_dir(), "shots.jsonl")
+
+def shot_config_path():
+    root = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+    directory = os.path.join(root, "omarchy", "ml")
+    os.makedirs(directory, exist_ok=True)
+    return os.path.join(directory, "shots.json")
+
+def load_shot_config():
+    path = shot_config_path()
+    if not os.path.isfile(path):
+        return {"ignore": [], "tags": {}, "saved": {}}
+    with open(path, encoding="utf-8") as handle:
+        data = json.load(handle)
+    if not isinstance(data, dict):
+        return {"ignore": [], "tags": {}, "saved": {}}
+    data.setdefault("ignore", [])
+    data.setdefault("tags", {})
+    data.setdefault("saved", {})
+    return data
+
+def save_shot_config(data):
+    with open(shot_config_path(), "w", encoding="utf-8") as handle:
+        json.dump(data, handle, indent=2)
+        handle.write("\n")
+
+def ignored(path, config):
+    real = os.path.abspath(os.path.expanduser(path))
+    for raw in config.get("ignore") or []:
+        folder = os.path.abspath(os.path.expanduser(str(raw)))
+        if real == folder or real.startswith(folder + os.sep):
+            return True
+    return False
 
 def nearest(rgb):
     best = None
@@ -188,7 +220,7 @@ def load_rows():
                 rows.append(json.loads(line))
     return rows
 
-def score(row, query):
+def score(row, query, tags):
     lowered = query.lower()
     points = 0
     weekday = str(row.get("weekday") or "").lower()
@@ -198,7 +230,10 @@ def score(row, query):
     for color in row.get("colors") or []:
         if color.lower() in lowered:
             points += 2
-    text = str(row.get("text") or "").lower()
+    extra = tags.get(row.get("path")) or []
+    if isinstance(extra, str):
+        extra = [extra]
+    text = (str(row.get("text") or "") + " " + " ".join(str(item) for item in extra)).lower()
     for word in re.findall(r"[a-z0-9]+", lowered):
         if word in STOP or word in WEEKDAYS or word in NAMED:
             continue
@@ -207,10 +242,30 @@ def score(row, query):
     return points
 
 def search(query):
+    config = load_shot_config()
+    tags = config.get("tags") or {}
+    rows = load_rows()
+    known = {row.get("path") for row in rows}
+    for path, words in tags.items():
+        if path in known or ignored(path, config) or not os.path.isfile(path):
+            continue
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            continue
+        rows.append({
+            "path": path,
+            "mtime": mtime,
+            "weekday": datetime.datetime.fromtimestamp(mtime).strftime("%A"),
+            "colors": [],
+            "text": "",
+        })
     best = None
     best_score = 0
-    for row in load_rows():
-        points = score(row, query)
+    for row in rows:
+        if ignored(row.get("path") or "", config):
+            continue
+        points = score(row, query, tags)
         if points > best_score:
             best = row
             best_score = points
@@ -220,6 +275,7 @@ def search(query):
     print(best["path"])
 
 def newest_png():
+    config = load_shot_config()
     roots = []
     for key in ("OMASNAP_SCREENSHOT_DIR", "XDG_PICTURES_DIR"):
         if os.environ.get(key):
@@ -236,6 +292,8 @@ def newest_png():
                 if not name.lower().endswith(".png"):
                     continue
                 path = os.path.join(dirpath, name)
+                if ignored(path, config):
+                    continue
                 try:
                     mtime = os.path.getmtime(path)
                 except OSError:
@@ -274,22 +332,82 @@ def parse_index(args):
 
 args = sys.argv[1:]
 if not args:
-    print("Usage: omarchy ml shot <index|search|index-latest>", file=sys.stderr)
+    print("Usage: omarchy ml shot <index|search|index-latest|tag|ignore|save|saved>", file=sys.stderr)
     sys.exit(1)
 command = args[0]
 if command == "index":
     parse_index(args[1:])
 elif command == "search":
-    if len(args) < 2:
+    if len(args) >= 3 and args[1] == "--saved":
+        name = " ".join(args[2:])
+        query = (load_shot_config().get("saved") or {}).get(name)
+        if not query:
+            print("No saved search named " + name + ".", file=sys.stderr)
+            sys.exit(1)
+        search(query)
+    elif len(args) < 2:
         print("Say what the screenshot looked like.", file=sys.stderr)
         sys.exit(1)
-    search(" ".join(args[1:]))
+    else:
+        search(" ".join(args[1:]))
 elif command == "index-latest":
     path = newest_png()
     if not path:
         sys.exit(0)
     record(path, None, None, None)
+elif command == "tag":
+    if len(args) < 3:
+        print("Usage: omarchy ml shot tag FILE WORDS...", file=sys.stderr)
+        sys.exit(1)
+    real = os.path.abspath(os.path.expanduser(args[1]))
+    data = load_shot_config()
+    tags = data.get("tags") or {}
+    current = [str(item) for item in tags.get(real) or []]
+    for word in args[2:]:
+        if word not in current:
+            current.append(word)
+    tags[real] = current
+    data["tags"] = tags
+    save_shot_config(data)
+    print(real)
+elif command == "ignore":
+    if len(args) != 2:
+        print("Usage: omarchy ml shot ignore DIRECTORY", file=sys.stderr)
+        sys.exit(1)
+    real = os.path.abspath(os.path.expanduser(args[1]))
+    data = load_shot_config()
+    folders = [str(item) for item in data.get("ignore") or []]
+    if real not in folders:
+        folders.append(real)
+    data["ignore"] = folders
+    save_shot_config(data)
+    print(real)
+elif command == "save":
+    if len(args) < 3:
+        print("Usage: omarchy ml shot save NAME QUERY...", file=sys.stderr)
+        sys.exit(1)
+    data = load_shot_config()
+    saved = data.get("saved") or {}
+    saved[args[1]] = " ".join(args[2:])
+    data["saved"] = saved
+    save_shot_config(data)
+    print(args[1])
+elif command == "saved":
+    saved = load_shot_config().get("saved") or {}
+    if len(args) == 1:
+        if not saved:
+            print("No saved searches.", file=sys.stderr)
+            sys.exit(1)
+        for name, query in saved.items():
+            print(f"{name}\t{query}")
+    else:
+        name = " ".join(args[1:])
+        query = saved.get(name)
+        if not query:
+            print("No saved search named " + name + ".", file=sys.stderr)
+            sys.exit(1)
+        search(query)
 else:
-    print("Usage: omarchy ml shot <index|search|index-latest>", file=sys.stderr)
+    print("Usage: omarchy ml shot <index|search|index-latest|tag|ignore|save|saved>", file=sys.stderr)
     sys.exit(1)
 PY
