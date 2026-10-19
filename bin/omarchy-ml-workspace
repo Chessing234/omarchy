@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # omarchy:summary=Learn the window sets you reopen and put one back
-# omarchy:args=<record|suggest|restore|train|park> [--print]
-# omarchy:examples=omarchy ml workspace suggest | omarchy ml workspace restore --print | omarchy ml workspace train --print
+# omarchy:args=<record|suggest|restore|train|park> [--print] | layout <save|restore|list|apps> [name] [apps...]
+# omarchy:examples=omarchy ml workspace suggest | omarchy ml workspace layout save writing | omarchy ml workspace layout apps writing Alacritty firefox
 
 set -euo pipefail
 
@@ -110,9 +110,93 @@ def restore(print_only):
     if not row:
         print("No workspace to restore yet.", file=sys.stderr)
         sys.exit(1)
+    open_row(row, print_only)
+
+def open_row(row, print_only):
     lines = [f"hyprctl dispatch workspace {row.get('workspace') or 1}"]
     lines.extend(launch_for(app) for app in row.get("apps") or [])
     run(lines, print_only)
+
+def config_dir():
+    root = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+    path = os.path.join(root, "omarchy", "ml")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+def load_layouts():
+    path = os.path.join(config_dir(), "layouts.json")
+    if not os.path.isfile(path):
+        return {}
+    with open(path, encoding="utf-8") as handle:
+        data = json.load(handle)
+    return data if isinstance(data, dict) else {}
+
+def save_layouts(data):
+    path = os.path.join(config_dir(), "layouts.json")
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(data, handle, indent=2)
+        handle.write("\n")
+
+def prompt(placeholder):
+    if sys.stdin.isatty() and shutil.which("gum"):
+        result = subprocess.run(["gum", "input", "--placeholder", placeholder], text=True, capture_output=True)
+        return result.stdout.strip()
+    if not sys.stdin.isatty():
+        return sys.stdin.readline().rstrip("\n")
+    return ""
+
+def layout_save(name):
+    if not name:
+        name = prompt("writing")
+    if not name:
+        print("Name the layout.", file=sys.stderr)
+        sys.exit(1)
+    wid, apps = grouped(clients())
+    if not apps:
+        print("No windows to save.", file=sys.stderr)
+        sys.exit(1)
+    data = load_layouts()
+    data[name] = {"workspace": wid, "apps": apps}
+    save_layouts(data)
+    print(name)
+
+def layout_restore(name, print_only):
+    if not name:
+        name = prompt("writing")
+    data = load_layouts()
+    row = data.get(name)
+    if not isinstance(row, dict):
+        print("No layout named " + str(name) + ".", file=sys.stderr)
+        sys.exit(1)
+    open_row(row, print_only)
+
+def layout_list():
+    data = load_layouts()
+    if not data:
+        print("No saved layouts.", file=sys.stderr)
+        sys.exit(1)
+    for name, row in data.items():
+        apps = ",".join((row or {}).get("apps") or [])
+        print(f"{name}\t{(row or {}).get('workspace')}\t{apps}")
+
+def layout_apps(name, apps):
+    if not name:
+        name = prompt("writing")
+    if not apps:
+        raw = prompt("Alacritty,firefox")
+        apps = [part.strip() for part in raw.split(",") if part.strip()]
+    if not name or not apps:
+        print("Usage: omarchy ml workspace layout apps <name> <app> [app...]", file=sys.stderr)
+        sys.exit(1)
+    data = load_layouts()
+    row = data.get(name)
+    if not isinstance(row, dict):
+        print("No layout named " + name + ".", file=sys.stderr)
+        sys.exit(1)
+    row["apps"] = apps
+    data[name] = row
+    save_layouts(data)
+    print(name)
 
 def monitor():
     return "nvtop" if shutil.which("nvtop") else "btop"
@@ -164,7 +248,7 @@ def suggest():
 
 args = sys.argv[1:]
 if not args:
-    print("Usage: omarchy ml workspace <record|suggest|restore|train|park>", file=sys.stderr)
+    print("Usage: omarchy ml workspace <record|suggest|restore|train|park|layout>", file=sys.stderr)
     sys.exit(1)
 command = args[0]
 print_only = "--print" in args[1:]
@@ -178,7 +262,21 @@ elif command == "train":
     train(print_only)
 elif command == "park":
     park(print_only)
+elif command == "layout":
+    action = next((arg for arg in args[1:] if arg != "--print"), "")
+    rest = [arg for arg in args[2:] if arg != "--print"]
+    if action == "save":
+        layout_save(rest[0] if rest else "")
+    elif action == "restore":
+        layout_restore(rest[0] if rest else "", print_only)
+    elif action == "list":
+        layout_list()
+    elif action == "apps":
+        layout_apps(rest[0] if rest else "", rest[1:])
+    else:
+        print("Usage: omarchy ml workspace layout <save|restore|list|apps>", file=sys.stderr)
+        sys.exit(1)
 else:
-    print("Usage: omarchy ml workspace <record|suggest|restore|train|park>", file=sys.stderr)
+    print("Usage: omarchy ml workspace <record|suggest|restore|train|park|layout>", file=sys.stderr)
     sys.exit(1)
 PY
