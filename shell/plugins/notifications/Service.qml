@@ -10,6 +10,7 @@ import qs.Commons
 
 import "components"
 import "NotificationLogic.js" as NotificationLogic
+import "NotificationFold.js" as NotificationFold
 
 Item {
   id: service
@@ -714,8 +715,8 @@ Item {
   }
 
   function replayHistory(raw) {
-    var rows = NotificationLogic.historyRows(
-      raw, service.replayCarryOver, NotificationUrgency.Normal, service.historyLimit)
+    var rows = NotificationFold.fold(NotificationLogic.historyRows(
+      raw, service.replayCarryOver, NotificationUrgency.Normal, service.historyLimit))
     service.replayCarryOver = []
 
     // Replaying nothing at all looks like a dead keybinding, so say so.
