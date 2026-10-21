@@ -354,12 +354,10 @@ run_root_transaction() {
       if [[ $mode == "refresh-plymouth" ]]; then
         validate_trusted_directory "$theme_dir/logos"
       fi
-      failure_hint=
     fi
     if (( ${#sddm_assets[@]} )); then
       repair_legacy_theme_directory "$sddm_dir"
       validate_trusted_directory "$sddm_dir"
-      failure_hint=
     fi
 
     publish_asset() {

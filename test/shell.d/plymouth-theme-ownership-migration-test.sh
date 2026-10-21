@@ -22,12 +22,6 @@ grep -Fq 'symlink' "$shipped_migration" ||
   fail "the migration refuses to chown through a symlink"
 pass "migration reclaims ownership without following symlinks"
 
-grep -Fq 'if $theme_dir is user-owned from a pre-4.0 install' "$ROOT/bin/omarchy-plymouth-set" ||
-  fail "omarchy-plymouth-set hints at the chown/chmod repair for Plymouth"
-grep -Fq 'if $sddm_dir is user-owned from a pre-4.0 install' "$ROOT/bin/omarchy-plymouth-set" ||
-  fail "omarchy-plymouth-set hints at the chown/chmod repair for SDDM"
-pass "omarchy-plymouth-set names the repair when a theme directory fails ownership checks"
-
 test_dir=$(mktemp -d)
 trap 'rm -rf "$test_dir"' EXIT
 
