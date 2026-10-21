@@ -349,9 +349,9 @@ run_root_transaction() {
 
     if (( ${#plymouth_assets[@]} )); then
       repair_legacy_theme_directory "$theme_dir"
-      repair_legacy_theme_directory "$theme_dir/logos"
       validate_trusted_directory "$theme_dir"
       if [[ $mode == "refresh-plymouth" ]]; then
+        repair_legacy_theme_directory "$theme_dir/logos"
         validate_trusted_directory "$theme_dir/logos"
       fi
     fi
