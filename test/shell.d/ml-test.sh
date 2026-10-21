@@ -69,10 +69,12 @@ rows.push({app:"GitHub", summary:"build failed", body:"main"})
 rows.push({app:"GitHub", summary:"build failed", body:"api"})
 rows.push({app:"GitHub", summary:"pipeline failed", body:"web"})
 for (let i = 0; i < 12; i++) rows.push({app:"Slack", summary:"new message", body:"#ops"})
-rows.push({app:"Omarchy", summary:"stand up", body:""})
+rows.push({app:"Omarchy", summary:"stand up", body:"", ts: 4, key: "reminder"})
 const folded = fold.fold(rows)
 if (folded[0].summary !== "3 failed builds, 12 messages from #ops") process.exit(1)
+if (folded[0].key !== "ml-fold") process.exit(3)
 if (folded.length !== 2 || folded[1].summary !== "stand up") process.exit(2)
+if (folded[1].ts !== 4) process.exit(4)
 ' "$ROOT/shell/plugins/notifications/NotificationFold.js") ||
   fail "history replay keeps the reminder and folds the rest"
 pass "notification fold collapses CI and chat"
@@ -227,6 +229,11 @@ pass "hold-to-talk types what whisper.cpp heard"
 
 [[ $("$ROOT/bin/omarchy-launch-jupyter" --print) == "http://127.0.0.1:8888/lab" ]] ||
   fail "jupyter stays on localhost"
+note_line=$(grep -F 'omarchy-notification-send' "$ROOT/bin/omarchy-launch-jupyter")
+[[ $note_line != *'$url'* && $note_line != *token* ]] ||
+  fail "jupyter notification leaves the token out" "$note_line"
+grep -Fq 'chmod 600 "$state/jupyter.url"' "$ROOT/bin/omarchy-launch-jupyter" ||
+  fail "jupyter url file is owner-only"
 grep -q 'SUPER + ALT + A' "$ROOT/default/hypr/bindings/ml.lua" ||
   fail "the intent launcher has a key"
 grep -q 'omarchy-ml-notify-fold --notify' "$ROOT/default/hypr/bindings/ml.lua" ||

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# omarchy:summary=Open Jupyter Lab on localhost and show its token
+# omarchy:summary=Open Jupyter Lab on localhost
 # omarchy:args=[--print]
 
 set -euo pipefail
@@ -19,9 +19,11 @@ fi
 
 state="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/ml"
 mkdir -p "$state"
+chmod 700 "$state"
 token=$(openssl rand -hex 8)
 url="http://127.0.0.1:8888/lab?token=$token"
 printf '%s\n' "$url" > "$state/jupyter.url"
+chmod 600 "$state/jupyter.url"
 
 nohup "$python" -m jupyter lab \
   --no-browser \
@@ -31,5 +33,5 @@ nohup "$python" -m jupyter lab \
   --ServerApp.password='' \
   > "$state/jupyter.log" 2>&1 &
 
-omarchy-notification-send "Jupyter" "$url"
+omarchy-notification-send "Jupyter" "Lab is open on this machine"
 xdg-open "$url"

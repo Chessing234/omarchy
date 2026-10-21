@@ -58,22 +58,20 @@ function digestLine(rows) {
   return parts.join(", ")
 }
 
+function rowTime(row) {
+  var e = row || {}
+  if (typeof e.ts === "number") return e.ts
+  return e.timestamp || 0
+}
+
 function copyRow(row) {
   var e = row || {}
-  return {
-    id: e.id || 0,
-    originalId: e.originalId || e.id || 0,
-    app: e.app || "",
-    appIcon: e.appIcon || "",
-    summary: e.summary || "",
-    body: e.body || "",
-    image: e.image || "",
-    glyph: e.glyph || "",
-    execArgv: e.execArgv || "",
-    urgency: e.urgency,
-    expireTimeout: e.expireTimeout || 0,
-    timestamp: e.timestamp || 0
+  var out = {}
+  var k
+  for (k in e) {
+    if (Object.prototype.hasOwnProperty.call(e, k)) out[k] = e[k]
   }
+  return out
 }
 
 function fold(rows) {
@@ -97,16 +95,18 @@ function fold(rows) {
   for (i = 0; i < list.length; i++) {
     var rowKind = classifyNotification(notificationText(list[i]))
     if (folded[rowKind]) {
-      if (!newest || (list[i].timestamp || 0) >= (newest.timestamp || 0)) newest = list[i]
+      if (!newest || rowTime(list[i]) >= rowTime(newest)) newest = list[i]
       continue
     }
     kept.push(copyRow(list[i]))
   }
 
   var digest = copyRow(newest || {})
+  digest.key = "ml-fold"
   digest.app = "omarchy"
   digest.summary = line
   digest.body = ""
+  digest.bodyLine = ""
   digest.glyph = "󰂛"
   kept.unshift(digest)
   return kept
