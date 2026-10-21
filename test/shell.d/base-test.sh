@@ -10,6 +10,12 @@ SHELL_TEST_DIR="$ROOT/test/shell.d"
 
 export ROOT
 
+# Commands print user-facing text in the language picked under Setup >
+# Language, so pin tests to English (a missing file means English) rather than
+# whatever the machine running them is set to. Tests of other languages point
+# this at a file of their own.
+export OMARCHY_LANGUAGE_FILE=$ROOT/test/.no-language
+
 pass() {
   printf 'ok - %s\n' "$1"
 }
@@ -139,6 +145,7 @@ fake_platform() {
 
   case $platform in
     aarch64-apple) compatible=(apple,j416c apple,t6021 apple,arm-platform) ;;
+    aarch64-qualcomm) compatible=(lenovo,yoga-slim7x qcom,x1e80100) ;;
     aarch64) compatible=(raspberrypi,5-model-b brcm,bcm2712) ;;
     x86) machine=x86_64 ;;
     *) fail "fake_platform knows the platform $platform" ;;
@@ -179,6 +186,37 @@ platform_root_copy() {
     chmod +x "$copy" || fail "copy $script for a fixture platform root"
   grep -qF -- "$fixture" "$copy" && ! grep -qF /usr/share/omarchy-platform "$copy" ||
     fail "$(basename -- "$script") reads the platform root from the fixture"
+}
+
+# How long this machine takes to start processes, as a percentage of the
+# laptop the timing budgets were measured on (100 there, never less): the
+# fastest of three runs of 100 fork/execs of true, against the 25ms they take
+# on that laptop. A test timing process-heavy work multiplies its budget by
+# this, so a Raspberry Pi or an ARM VM gets the room its slower process starts
+# need, and only what is still several times over fails.
+process_speed_percent() {
+  local best="" start end elapsed
+
+  for _ in 1 2 3; do
+    start=$EPOCHREALTIME
+    for _ in {1..100}; do /usr/bin/true; done
+    end=$EPOCHREALTIME
+    elapsed=$(( ${end/[.,]/} - ${start/[.,]/} ))
+    if [[ -z $best ]] || (( elapsed < best )); then
+      best=$elapsed
+    fi
+  done
+  echo $(( best > 25000 ? best * 100 / 25000 : 100 ))
+}
+
+# Sets SPEED_PERCENT for a timing test, skipping the rest of the file when the
+# machine is so much slower than the reference that a budget scaled to it
+# could no longer tell a regression from the machine.
+require_comparable_speed() {
+  SPEED_PERCENT=$(process_speed_percent)
+  (( SPEED_PERCENT <= 800 )) && return 0
+  skip "processes start $(( SPEED_PERCENT / 100 ))x slower than on the reference laptop; skipping $1"
+  exit 0
 }
 
 run_node_test() {
