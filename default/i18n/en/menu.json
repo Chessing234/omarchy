@@ -375,6 +375,12 @@
   "trigger.ml.intent": {
     "label": "Run by asking"
   },
+  "trigger.ml.teach": {
+    "label": "Teach a phrase"
+  },
+  "trigger.ml.notes": {
+    "label": "Notes folder"
+  },
   "trigger.ml.fold": {
     "label": "Fold notifications"
   },
