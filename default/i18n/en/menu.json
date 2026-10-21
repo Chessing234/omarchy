@@ -384,6 +384,15 @@
   "trigger.ml.restore": {
     "label": "Restore workspace"
   },
+  "trigger.ml.layout-save": {
+    "label": "Save workspace layout"
+  },
+  "trigger.ml.layout": {
+    "label": "Open a saved layout"
+  },
+  "trigger.ml.layout-apps": {
+    "label": "Edit a saved layout"
+  },
   "trigger.ml.train": {
     "label": "Training workspace"
   },
