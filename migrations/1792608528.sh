@@ -1,12 +1,7 @@
 echo "Reclaim pre-4.0 user-owned Plymouth and SDDM theme directories"
 
-# Pre-4.0 ISO installs created /usr/share/plymouth/themes/omarchy (and the
-# sibling SDDM theme dir) as the installing user with mode 0700. Pacman does
-# not re-chown an existing directory on upgrade, so 4.0+ omarchy-plymouth-set
-# refuses to publish into it forever ("must be root-owned..."). A user-owned
-# boot theme directory is also a privileged-path ownership hole: anything that
-# user writes there is consumed by the boot splash as root. Same pattern as
-# migrations/1788662350.sh for other pre-4.0 privileged paths.
+# Omarchy 3.7 and 3.8 published unlock themes with `sudo cp -a "$staging_dir/." "$theme_dir/"`, stamping the user's 0700 mktemp directory and files onto /usr/share/plymouth/themes/omarchy.
+# Pacman never re-chowns an existing directory, so 4.0+ omarchy-plymouth-set refuses to publish into it, and the user can rewrite what the boot splash loads. The SDDM theme directory is checked the same way.
 
 plymouth_theme=/usr/share/plymouth/themes/omarchy
 sddm_theme=/usr/share/sddm/themes/omarchy
@@ -23,7 +18,7 @@ as_root() {
 # Missing paths are fine — a fresh package install owns them correctly.
 reclaim_theme_directory() {
   local path=$1
-  local uid mode
+  local uid mode file replacement
 
   if [[ -L $path ]]; then
     echo "  Leaving $path alone (symlink)."
@@ -44,6 +39,13 @@ reclaim_theme_directory() {
   echo "  Repairing $path (was uid=$uid mode=$mode)"
   as_root chown root:root -- "$path"
   as_root chmod 755 -- "$path"
+
+  # The files cp -a copied in are still the user's. Replace rather than chown them, so a descriptor the user holds open for writing reaches nothing.
+  while IFS= read -r -d '' file; do
+    replacement=$(as_root mktemp -- "$path/.${file##*/}.omarchy-new.XXXXXX")
+    as_root install -o root -g root -m 0644 -T -- "$file" "$replacement"
+    as_root mv -fT -- "$replacement" "$file"
+  done < <(find "$path" -mindepth 1 -maxdepth 1 -type f \( ! -uid 0 -o -perm /022 \) -print0)
 }
 
 reclaim_theme_directory "$plymouth_theme"

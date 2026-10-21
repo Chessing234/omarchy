@@ -4,7 +4,7 @@ set -euo pipefail
 
 source "$(dirname "$0")/base-test.sh"
 
-shipped_migration="$ROOT/migrations/1789384000.sh"
+shipped_migration="$ROOT/migrations/1792608528.sh"
 [[ -f $shipped_migration ]] || fail "plymouth theme ownership migration exists at $shipped_migration"
 
 mapfile -t plymouth_owner_migrations < <(grep -RIlF '/usr/share/plymouth/themes/omarchy' "$ROOT/migrations")
@@ -50,6 +50,12 @@ printf 'chmod %s\n' "$*" >>"$CALLS"
 # rejects, and the assertions only care that the migration requested 755.
 STUB
 
+cat >"$test_dir/bin/install" <<'STUB'
+#!/bin/bash
+printf 'install %s\n' "$*" >>"$CALLS"
+cp -f -- "${@: -2:1}" "${@: -1}"
+STUB
+
 cat >"$test_dir/bin/stat" <<STUB
 #!/bin/bash
 path=\${@: -1}
@@ -87,6 +93,7 @@ PATH="$test_dir/bin:/usr/bin:/bin" bash "$migration"
 pass "missing theme directories are a no-op"
 
 mkdir -m 0700 "$plymouth" "$sddm"
+echo "user script" >"$plymouth/omarchy.script"
 : >"$CALLS"
 PATH="$test_dir/bin:/usr/bin:/bin" bash "$migration"
 grep -qxF "sudo chown root:root -- $plymouth" "$CALLS" ||
@@ -98,6 +105,15 @@ grep -qxF "sudo chmod 755 -- $plymouth" "$CALLS" ||
 grep -qxF "sudo chmod 755 -- $sddm" "$CALLS" ||
   fail "migration chmods the SDDM theme dir" "$(cat "$CALLS")"
 pass "user-owned theme directories are reclaimed"
+
+grep -qE "^sudo install -o root -g root -m 0644 -T -- $plymouth/omarchy.script $plymouth/\.omarchy\.script\.omarchy-new\.[A-Za-z0-9]+\$" "$CALLS" ||
+  fail "migration copies a user-owned file to a root-owned replacement" "$(cat "$CALLS")"
+grep -qE "^sudo mv -fT -- $plymouth/\.omarchy\.script\.omarchy-new\.[A-Za-z0-9]+ $plymouth/omarchy.script\$" "$CALLS" ||
+  fail "migration moves the replacement over the user-owned file" "$(cat "$CALLS")"
+[[ $(cat "$plymouth/omarchy.script") == "user script" ]] ||
+  fail "the replaced file keeps its contents"
+! grep -q "chown .*omarchy.script" "$CALLS" || fail "migration replaces files rather than chowning them" "$(cat "$CALLS")"
+pass "user-owned files in a reclaimed theme directory are replaced"
 
 cat >"$test_dir/bin/stat" <<'STUB'
 #!/bin/bash
