@@ -28,6 +28,11 @@ for device in "$pci_devices_path"/*; do
   esac
 done
 
+# Adreno GPUs are platform devices, so lspci never sees them.
+if omarchy-hw-aarch64-qualcomm; then
+  PACKAGES+=(vulkan-freedreno)
+fi
+
 if (( ${#PACKAGES[@]} > 0 )); then
   omarchy-pkg-add "${PACKAGES[@]}"
 fi
