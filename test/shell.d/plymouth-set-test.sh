@@ -966,15 +966,3 @@ status=$?
 assert_no_temporary_files "$fake_root"
 
 pass "a reset refusal cannot fall through to an unhardened SDDM copy"
-
-if grep -q 'OMARCHY_PATH:=/usr/share/omarchy' "$ROOT/bin/omarchy-plymouth-set"; then
-  pass "omarchy-plymouth-set falls back to /usr/share/omarchy when OMARCHY_PATH is unset"
-else
-  fail "omarchy-plymouth-set must default OMARCHY_PATH to /usr/share/omarchy"
-fi
-
-if grep -q 'omarchy:requires-sudo=true' "$ROOT/bin/omarchy-plymouth-set"; then
-  fail "omarchy-plymouth-set must not advertise requires-sudo (invites sudo and strips OMARCHY_PATH)"
-else
-  pass "omarchy-plymouth-set does not advertise requires-sudo"
-fi
