@@ -33,5 +33,5 @@ nohup "$python" -m jupyter lab \
   --ServerApp.password='' \
   > "$state/jupyter.log" 2>&1 &
 
-omarchy-notification-send "Jupyter" "Lab is open on this machine"
+omarchy-notification-send "$(omarchy-i18n ml.jupyterTitle)" "$(omarchy-i18n ml.jupyterOpen)"
 xdg-open "$url"
