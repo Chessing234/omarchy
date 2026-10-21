@@ -26,12 +26,18 @@ if [[ -z $browser_exec ]]; then
   exit 1
 fi
 
-if "$browser_exec" --help 2>/dev/null | grep MOZ_LOG >/dev/null; then
-  private_flag="--private-window"
-elif [[ $browser_exec =~ edge ]]; then
-  private_flag="--inprivate"
-else
-  private_flag="--incognito"
+# Only a private launch needs the browser's flag, and probing a Firefox-family
+# browser's --help starts the whole binary, so ordinary launches skip it and
+# leave their arguments as they are.
+private_flag="--private"
+if [[ " $* " == *" --private "* ]]; then
+  if "$browser_exec" --help 2>/dev/null | grep -q MOZ_LOG; then
+    private_flag="--private-window"
+  elif [[ $browser_exec =~ edge ]]; then
+    private_flag="--inprivate"
+  else
+    private_flag="--incognito"
+  fi
 fi
 
 launch_args=()
