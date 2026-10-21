@@ -9,6 +9,25 @@ tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
 
 export OMARCHY_KEYRING_DIR="$tmpdir/keyrings"
+autologin_conf="$tmpdir/autologin.conf"
+
+# A password login has no SDDM autologin file. The repair must not touch a
+# normal password-protected default keyring.
+mkdir -p "$OMARCHY_KEYRING_DIR"
+printf 'login\n' >"$OMARCHY_KEYRING_DIR/default"
+printf 'GNUPG\x01encrypted-not-really' >"$OMARCHY_KEYRING_DIR/login.keyring"
+cp -a "$OMARCHY_KEYRING_DIR/login.keyring" "$tmpdir/login.before"
+OMARCHY_AUTOLOGIN_CONF="$tmpdir/missing-autologin.conf" "$repair"
+cmp -s "$tmpdir/login.before" "$OMARCHY_KEYRING_DIR/login.keyring" ||
+  fail "password login had its keyring rewritten"
+[[ $(tr -d '[:space:]' <"$OMARCHY_KEYRING_DIR/default") == login ]] ||
+  fail "password login had its default pointer moved"
+pass "password login keeps a protected default keyring"
+
+printf '[Autologin]\nUser=tester\nSession=omarchy.desktop\n' >"$autologin_conf"
+export OMARCHY_AUTOLOGIN_CONF="$autologin_conf"
+rm -rf "$OMARCHY_KEYRING_DIR"
+mkdir -p "$OMARCHY_KEYRING_DIR"
 
 has_backup() {
   local prefix=$1
@@ -17,7 +36,6 @@ has_backup() {
 }
 
 # Healthy cleartext stub must be left alone.
-mkdir -p "$OMARCHY_KEYRING_DIR"
 cat >"$OMARCHY_KEYRING_DIR/Default_keyring.keyring" <<'EOF'
 [keyring]
 display-name=Default keyring

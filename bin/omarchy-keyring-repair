@@ -15,8 +15,13 @@ set -euo pipefail
 # Run early in the graphical session, before apps ask for secrets: restore a
 # fresh cleartext default when the on-disk keyring is unparseable or when
 # `default` points at a password-protected keyring.
+#
+# Only SDDM autologin needs that passwordless keyring. A password login
+# unlocks a normal gnome-keyring through pam, and resetting it here would
+# throw away a working default on every boot.
 
 KEYRING_DIR="${OMARCHY_KEYRING_DIR:-$HOME/.local/share/keyrings}"
+AUTOLOGIN_CONF="${OMARCHY_AUTOLOGIN_CONF:-/etc/sddm.conf.d/autologin.conf}"
 CLEARTEXT_NAME="Default_keyring"
 CLEARTEXT_FILE="$KEYRING_DIR/$CLEARTEXT_NAME.keyring"
 DEFAULT_FILE="$KEYRING_DIR/default"
@@ -77,6 +82,11 @@ backup_file() {
   stamp=$(date +%Y%m%d%H%M%S)
   mv -f "$file" "$file.broken-$stamp"
 }
+
+# Password logins keep whatever default the user already has.
+if [[ ! -f $AUTOLOGIN_CONF ]]; then
+  exit 0
+fi
 
 mkdir -p "$KEYRING_DIR"
 chmod 700 "$KEYRING_DIR" 2>/dev/null || true
