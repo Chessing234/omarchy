@@ -197,7 +197,7 @@ main() {
   fi
 
   if (( notify )); then
-    omarchy-notification-send "Eyes" "${answer:0:300}" || true
+    omarchy-notification-send "$(omarchy-i18n capture.eyesTitle)" "${answer:0:300}" || true
   fi
 }
 
