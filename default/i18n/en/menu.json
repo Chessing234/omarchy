@@ -297,6 +297,9 @@
   "trigger.sense.scenes": {
     "label": "Learned Scenes"
   },
+  "trigger.sense.routines": {
+    "label": "Learned Routines"
+  },
   "trigger.sense.flow": {
     "label": "Flow State"
   },
