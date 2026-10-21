@@ -20,12 +20,12 @@ if (( code == 0 )); then
   hex=$(omarchy-theme-color green accent 2>/dev/null || true)
   if [[ $hex =~ ^#[0-9A-Fa-f]{6}$ ]]; then
     hex="${hex#\#}"
-    printf '\n\033[38;2;%d;%d;%dm● \033[0mDone! Press any key to close...' "0x${hex:0:2}" "0x${hex:2:2}" "0x${hex:4:2}" >/dev/tty
+    printf '\n\033[38;2;%d;%d;%dm● \033[0m%s' "0x${hex:0:2}" "0x${hex:2:2}" "0x${hex:4:2}" "$(omarchy-i18n done.success)" >/dev/tty
   else
-    printf '\n\033[32m● \033[0mDone! Press any key to close...' >/dev/tty
+    printf '\n\033[32m● \033[0m%s' "$(omarchy-i18n done.success)" >/dev/tty
   fi
 else
-  printf '\n\033[31m● \033[0mFailed (exit code %d)! Press any key to close...' "$code" >/dev/tty
+  printf '\n\033[31m● \033[0m%s' "$(omarchy-i18n done.failed "$code")" >/dev/tty
 fi
 read -rsn 1 </dev/tty
 echo >/dev/tty
