@@ -431,7 +431,7 @@ check_new_routines() {
     printf '%s\n' "$seq" >>"$KNOWN_ROUTINES_FILE"
     printf 'new routine learned: %s (%s). replay it with: omarchy sense routine %s\n' \
       "$name" "${seq//,/ -> }" "$name"
-    omarchy-notification-send "New routine learned" "$name. Replay: omarchy sense routine $name" || true
+    omarchy-notification-send "$(omarchy-i18n sense.routineLearned)" "$(omarchy-i18n sense.routineReplay "$name")" || true
   done <<<"$(routines_list)"
 }
 
@@ -513,7 +513,7 @@ guardian_guard() {
     fi
     mkdir -p "$SENSE_DIR"
     printf '%s\t%s\n' "$(now_epoch)" "$current_dnd" >"$GUARDIAN_FILE"
-    omarchy-notification-send "In flow" "Silencing notifications until you surface" || true
+    omarchy-notification-send "$(omarchy-i18n sense.inFlow)" "$(omarchy-i18n sense.silencing)" || true
     omarchy-shell notifications setDnd on >/dev/null 2>&1 || true
     printf 'in flow; notifications silenced\n'
   else
@@ -579,7 +579,7 @@ scene_apply() {
   if [[ -n $missing ]]; then
     printf 'not open right now:%s\n' "$missing"
   fi
-  omarchy-notification-send "Scene restored" "$found is back where it belongs" || true
+  omarchy-notification-send "$(omarchy-i18n sense.sceneRestored)" "$(omarchy-i18n sense.sceneBack "$found")" || true
 }
 
 watch_events() {
