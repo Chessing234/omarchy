@@ -393,6 +393,12 @@
   "trigger.ml.chat": {
     "label": "Local chat"
   },
+  "trigger.ml.dictation-word": {
+    "label": "Dictation word"
+  },
+  "trigger.ml.chat-model": {
+    "label": "Chat model"
+  },
   "trigger.ml.jupyter": {
     "label": "Jupyter"
   },
@@ -608,6 +614,9 @@
   },
   "setup.default.dictation.whisper-cli": {
     "label": "Whisper.cpp"
+  },
+  "setup.default.dictation.whisper-language": {
+    "label": "Whisper language"
   },
   "setup.default.terminal": {
     "label": "Terminal",
