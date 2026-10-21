@@ -88,14 +88,14 @@ sed \
   "$shipped_migration" >"$migration"
 
 : >"$CALLS"
-PATH="$test_dir/bin:/usr/bin:/bin" bash "$migration"
+PATH="$test_dir/bin:/usr/bin:/bin" bash -euo pipefail "$migration"
 [[ ! -s $CALLS ]] || fail "missing theme directories do not escalate" "$(cat "$CALLS")"
 pass "missing theme directories are a no-op"
 
 mkdir -m 0700 "$plymouth" "$sddm"
 echo "user script" >"$plymouth/omarchy.script"
 : >"$CALLS"
-PATH="$test_dir/bin:/usr/bin:/bin" bash "$migration"
+PATH="$test_dir/bin:/usr/bin:/bin" bash -euo pipefail "$migration"
 grep -qxF "sudo chown root:root -- $plymouth" "$CALLS" ||
   fail "migration chowns the Plymouth theme dir" "$(cat "$CALLS")"
 grep -qxF "sudo chown root:root -- $sddm" "$CALLS" ||
@@ -117,29 +117,61 @@ pass "user-owned files in a reclaimed theme directory are replaced"
 
 cat >"$test_dir/bin/stat" <<'STUB'
 #!/bin/bash
+path=${@: -1}
 if [[ $1 == "-c" && $2 == "%u" ]]; then
   echo 0
   exit 0
 fi
 if [[ $1 == "-c" && $2 == "%a" ]]; then
-  echo 755
+  python3 -c "import os,stat as s,sys; print(oct(s.S_IMODE(os.stat(sys.argv[1]).st_mode))[2:])" "$path"
   exit 0
 fi
 exec /usr/bin/stat "$@"
 STUB
 chmod +x "$test_dir/bin/stat"
+rm -f -- "$plymouth/omarchy.script"
 # Use the platform chmod via env -PATH so the stub is not selected.
 env PATH=/usr/bin:/bin chmod 755 "$plymouth" "$sddm" 2>/dev/null || env PATH=/bin:/usr/bin chmod 755 "$plymouth" "$sddm"
 : >"$CALLS"
-PATH="$test_dir/bin:/usr/bin:/bin" bash "$migration"
+PATH="$test_dir/bin:/usr/bin:/bin" bash -euo pipefail "$migration"
 [[ ! -s $CALLS ]] || fail "root-owned theme directories are left alone" "$(cat "$CALLS")"
 pass "root-owned theme directories are left alone"
+
+# A run interrupted between the chown and the chmod leaves a root-owned 0700 directory.
+env PATH=/usr/bin:/bin chmod 700 "$plymouth"
+: >"$CALLS"
+PATH="$test_dir/bin:/usr/bin:/bin" bash -euo pipefail "$migration"
+grep -qxF "sudo chmod 755 -- $plymouth" "$CALLS" ||
+  fail "a root-owned 0700 theme dir is opened back up" "$(cat "$CALLS")"
+env PATH=/usr/bin:/bin chmod 755 "$plymouth"
+pass "a root-owned 0700 theme dir is opened back up"
+
+# A run interrupted after the directory was reclaimed leaves user-owned files in a root-owned one.
+echo "user logo" >"$plymouth/logo.png"
+: >"$CALLS"
+PATH="$test_dir/bin:/usr/bin:/bin" bash -euo pipefail "$migration"
+grep -qE "^sudo install -o root -g root -m 0644 -T -- $plymouth/logo.png " "$CALLS" ||
+  fail "user-owned files in a root-owned theme dir are still replaced" "$(cat "$CALLS")"
+! grep -qE "chown|chmod" "$CALLS" || fail "a root-owned 0755 theme dir is not touched again" "$(cat "$CALLS")"
+rm -f -- "$plymouth/logo.png"
+pass "user-owned files in a root-owned theme dir are still replaced"
+
+cat >"$test_dir/bin/find" <<'STUB'
+#!/bin/bash
+exit 1
+STUB
+chmod +x "$test_dir/bin/find"
+if PATH="$test_dir/bin:/usr/bin:/bin" bash -euo pipefail "$migration" >/dev/null 2>&1; then
+  fail "a failed file scan fails the migration"
+fi
+rm -f -- "$test_dir/bin/find"
+pass "a failed file scan fails the migration"
 
 rm -rf "$plymouth" "$sddm"
 mkdir -p "$test_dir/elsewhere"
 mkdir -m 0700 "$test_dir/elsewhere/omarchy"
 ln -s "$test_dir/elsewhere/omarchy" "$plymouth"
 : >"$CALLS"
-PATH="$test_dir/bin:/usr/bin:/bin" bash "$migration"
+PATH="$test_dir/bin:/usr/bin:/bin" bash -euo pipefail "$migration"
 ! grep -q chown "$CALLS" || fail "migration does not chown through a symlink" "$(cat "$CALLS")"
 pass "symlink theme directories are left alone"

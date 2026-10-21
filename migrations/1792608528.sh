@@ -19,6 +19,7 @@ as_root() {
 reclaim_theme_directory() {
   local path=$1
   local uid mode file replacement
+  local -a files
 
   if [[ -L $path ]]; then
     echo "  Leaving $path alone (symlink)."
@@ -32,20 +33,23 @@ reclaim_theme_directory() {
   uid=$(stat -c %u -- "$path") || return 1
   mode=$(stat -c %a -- "$path") || return 1
 
-  if (( uid == 0 )) && (( (8#$mode & 0022) == 0 )); then
-    return 0
+  # Checked apart from the files, so a run interrupted after the chown still finishes on the next one.
+  if (( uid != 0 )) || [[ $mode != "755" ]]; then
+    echo "  Repairing $path (was uid=$uid mode=$mode)"
+    as_root chown root:root -- "$path"
+    as_root chmod 755 -- "$path"
   fi
 
-  echo "  Repairing $path (was uid=$uid mode=$mode)"
-  as_root chown root:root -- "$path"
-  as_root chmod 755 -- "$path"
+  mapfile -d '' -t files < <(find "$path" -mindepth 1 -maxdepth 1 -type f \( ! -uid 0 -o -perm /022 \) -print0)
+  wait $! || return 1
 
   # The files cp -a copied in are still the user's. Replace rather than chown them, so a descriptor the user holds open for writing reaches nothing.
-  while IFS= read -r -d '' file; do
+  for file in "${files[@]}"; do
+    echo "  Replacing $file with a root-owned copy"
     replacement=$(as_root mktemp -- "$path/.${file##*/}.omarchy-new.XXXXXX")
     as_root install -o root -g root -m 0644 -T -- "$file" "$replacement"
     as_root mv -fT -- "$replacement" "$file"
-  done < <(find "$path" -mindepth 1 -maxdepth 1 -type f \( ! -uid 0 -o -perm /022 \) -print0)
+  done
 }
 
 reclaim_theme_directory "$plymouth_theme"
