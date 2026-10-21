@@ -38,7 +38,7 @@ publish_creds() {
 }
 
 if (( $# == 0 )); then
-  choices=$(printf "%s\n" "${options[@]}" | gum choose --header "Select database (return to install, esc to cancel)") || exit 0
+  choices=$(printf "%s\n" "${options[@]}" | gum choose --header "$(omarchy-i18n docker.selectDatabase)") || main_menu
 else
   choices="$*"
 fi
