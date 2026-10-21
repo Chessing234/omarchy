@@ -378,6 +378,9 @@
   "trigger.ml.fold": {
     "label": "Fold notifications"
   },
+  "trigger.ml.fold-rule": {
+    "label": "Change fold groups"
+  },
   "trigger.ml.search": {
     "label": "Search screenshots"
   },
