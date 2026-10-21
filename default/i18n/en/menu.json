@@ -381,6 +381,15 @@
   "trigger.ml.search": {
     "label": "Search screenshots"
   },
+  "trigger.ml.shot-tag": {
+    "label": "Tag a screenshot"
+  },
+  "trigger.ml.shot-ignore": {
+    "label": "Ignore a screenshot folder"
+  },
+  "trigger.ml.shot-saved": {
+    "label": "Saved screenshot searches"
+  },
   "trigger.ml.restore": {
     "label": "Restore workspace"
   },
