@@ -52,7 +52,7 @@ enable_presentation() {
   omarchy-shell -q notifications setDnd on
   omarchy-toggle-idle stay-awake >/dev/null
   omarchy-shell -q omarchy.indicators refresh
-  omarchy-notification-send -g 󰐼 "Presentation mode on" "Stay awake, notifications silenced, bar hidden"
+  omarchy-notification-send -g 󰐼 "$(omarchy-i18n presentation.onTitle)" "$(omarchy-i18n presentation.onBody)"
 }
 
 disable_presentation() {
@@ -77,7 +77,7 @@ disable_presentation() {
     omarchy-toggle-idle allow-idle >/dev/null
   fi
   omarchy-shell -q omarchy.indicators refresh
-  omarchy-notification-send -g 󰐼 "Presentation mode off"
+  omarchy-notification-send -g 󰐼 "$(omarchy-i18n presentation.offTitle)"
 }
 
 print_status() {
