@@ -411,7 +411,6 @@ function networkFailureReason(reason, needsCredentials, reasons, tr, isEnterpris
   if (reason === r.WifiClientFailed) return t("network.connectionFailed", "Connection failed")
   return t("network.failedToConnect", "Failed to connect")
 }
-}
 
 // Whether a failed connect should reopen the passphrase prompt. NoSecrets
 // means credentials are missing only for a network that actually uses them.

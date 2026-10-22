@@ -853,7 +853,6 @@ Panel {
   function networkFailureReason(reason, needsCredentials, isEnterprise) {
     return Model.networkFailureReason(reason, needsCredentials, connectionFailReasons, Commons.I18n.t, isEnterprise)
   }
-  }
 
   function shouldRepromptPassphrase(reason, needsCredentials) {
     return Model.shouldRepromptPassphrase(reason, needsCredentials, connectionFailReasons)

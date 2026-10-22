@@ -274,9 +274,9 @@ assert(
 )
 
 const reasons = { NoSecrets: 1, WifiAuthTimeout: 2, WifiNetworkLost: 3, WifiClientDisconnected: 4, WifiClientFailed: 5 }
-assertEqual(network.networkFailureReason(reasons.NoSecrets, true, reasons), 'Wrong password', 'network maps missing credential failures')
+assertEqual(network.networkFailureReason(reasons.NoSecrets, true, reasons), 'Passphrase required', 'network maps missing credential failures')
 assertEqual(network.networkFailureReason(reasons.WifiAuthTimeout, true, reasons), 'Wrong password', 'network maps credentialed auth timeouts')
-assertEqual(network.networkFailureReason(reasons.WifiAuthTimeout, true, reasons, true), 'Connection timed out', 'network does not call enterprise timeouts a wrong password')
+assertEqual(network.networkFailureReason(reasons.WifiAuthTimeout, true, reasons, undefined, true), 'Connection timed out', 'network does not call enterprise timeouts a wrong password')
 assertEqual(network.networkFailureReason(reasons.NoSecrets, false, reasons), 'Failed to connect', 'network gives passwordless missing-secret failures generic copy')
 assertEqual(network.networkFailureReason(reasons.WifiAuthTimeout, false, reasons), 'Failed to connect', 'network gives passwordless auth timeouts generic copy')
 assertEqual(network.networkFailureReason(99, true, reasons), 'Failed to connect', 'network maps unknown failures')
@@ -303,7 +303,7 @@ assert(
   'enterprise connect does not pin an eight-second auth timeout'
 )
 assert(
-  /row\.isFailed \? \(root\.failureReason \|\| "Wrong password"\)/.test(panelSource),
+  /row\.isFailed \? \(root\.failureReason \|\| Commons\.I18n\.t\("network\.wrongPassword"\)\)/.test(panelSource),
   'password prompt shows the mapped failureReason instead of a hard-coded wrong password'
 )
 
