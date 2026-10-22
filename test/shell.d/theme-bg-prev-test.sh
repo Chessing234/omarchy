@@ -56,7 +56,7 @@ pass "theme-bg-prev starts at the last background when none is set"
 
 rm -rf "$home/.local/state/omarchy/current/theme/backgrounds"
 mkdir -p "$home/.local/state/omarchy/current/theme/backgrounds"
-HOME="$home" PATH="$stub:$PATH" NOTIFY_LOG="$tmpdir/notify" \
+HOME="$home" OMARCHY_PATH="$ROOT" PATH="$stub:$ROOT/bin:$PATH" NOTIFY_LOG="$tmpdir/notify" \
   "$BASH" "$ROOT/bin/omarchy-theme-bg-prev"
 
 grep -Fq 'No background was found for theme' "$tmpdir/notify" ||
