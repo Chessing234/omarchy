@@ -66,7 +66,7 @@ current_mic() {
 meeting_on() {
   read_state
   if ((active)); then
-    omarchy-notification-send -g "mic" "Meeting mode" "Already on" || true
+    omarchy-notification-send -g "mic" "$(omarchy-i18n meeting.title)" "$(omarchy-i18n meeting.alreadyOn)" || true
     printf 'on\n'
     return 0
   fi
@@ -82,14 +82,14 @@ meeting_on() {
     wpctl set-mute @DEFAULT_AUDIO_SOURCE@ 1 >/dev/null 2>&1 || true
   fi
   omarchy-shell -q omarchy.indicators refresh >/dev/null 2>&1 || true
-  omarchy-notification-send -g "mic" "Meeting mode on" "Mic muted, notifications silenced, staying awake" || true
+  omarchy-notification-send -g "mic" "$(omarchy-i18n meeting.onTitle)" "$(omarchy-i18n meeting.onBody)" || true
   printf 'on\n'
 }
 
 meeting_off() {
   read_state
   if ((!active)); then
-    omarchy-notification-send -g "mic" "Meeting mode" "Already off" || true
+    omarchy-notification-send -g "mic" "$(omarchy-i18n meeting.title)" "$(omarchy-i18n meeting.alreadyOff)" || true
     printf 'off\n'
     return 0
   fi
@@ -105,7 +105,7 @@ meeting_off() {
   fi
   rm -f "$(state_file)"
   omarchy-shell -q omarchy.indicators refresh >/dev/null 2>&1 || true
-  omarchy-notification-send -g "mic" "Meeting mode off" "Restored mic, notifications, and idle" || true
+  omarchy-notification-send -g "mic" "$(omarchy-i18n meeting.offTitle)" "$(omarchy-i18n meeting.offBody)" || true
   printf 'off\n'
 }
 
